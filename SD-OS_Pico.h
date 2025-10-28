@@ -7,7 +7,7 @@
 #define ILINE 80
 #include <pins_arduino.h>
 /**************************************************/
-#define MAKERSPI1
+#define WS147GPIO
 
 /*! \brief MYSPI0                                 
     \ingroup SDOS_PICO 

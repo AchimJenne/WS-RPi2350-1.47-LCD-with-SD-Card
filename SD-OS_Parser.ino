@@ -160,15 +160,25 @@ int fnc_CONFIG(const char* szCmdLn)
   Serial.print(F("CPU- Frequency: "));
   Serial.print(F_CPU/1000000);
   Serial.println(F(" MHz"));
-  Serial.println(F("SPI-Interface"));  
-  Serial.print(F("SPI : "));
+  Serial.print(F("SD-Interface :  "));  
+  
   if (!SD.begin( SDCRD)) 
   {
      Serial.println(F("failed"));
   } else {
     digitalWrite(PIN_LED, 1);
     Serial.println(F("OK"));
-#if not defined MAKERGPIO && not defined WS147GPIO
+#if defined MAKERGPIO || defined WS147GPIO
+    Serial.print(F("GPIO :  "));
+    Serial.print(RP_CLK_GPIO);
+    Serial.print(F(", "));
+    Serial.print(RP_CMD_GPIO);
+    Serial.print(F(", "));
+    Serial.println(RP_DAT0_GPIO);
+#else
+    Serial.print(F("SPI : "));
+    Serial.print(SDSPD);
+    Serial.println(F(" Mhz"));
     Serial.print(F("MISO : "));
     Serial.println(PIN_MISO);
     Serial.print(F("MOSI : "));

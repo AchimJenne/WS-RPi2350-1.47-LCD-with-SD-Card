@@ -43,7 +43,7 @@ char sPath[ILINE]={"/"};
 volatile bool bAuto = false;
 bool bRTC = false;
 bool bSDCRD;
-time_t tiUxOld, tiUx= (1761573636);  // date of SW- Release;
+time_t tiUxOld, tiUx= (1761660036);  // date of SW- Release;
 
 struct timeval tiV;
 uint16_t *BlackImage;
