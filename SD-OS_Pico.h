@@ -73,8 +73,22 @@
 
 /**************************************************/
 #define DELAYLED 200
-#define USBPWR 24  //Raspberry Pico only
+#define USBPWR 24  //Raspberry Picos only
 //#define EXTPWR 29
+
+//XModem
+#define SOH  0x01
+#define STX  0x02
+#define EOT  0x04
+#define ACK  0x06
+#define NAK  0x15
+#define CAN  0x18
+#define PAD  0x1a
+#define X_BLOCK_SIZE  128
+#define X_BUF_SIZE    X_BLOCK_SIZE + 6 
+#define X_RETRANS 10
+
+// ANSI/ASCII control character
 #define C_BS  0x08
 #define C_ESC 0x1b
 #define S_CLS F("\e[0H\e[2J")

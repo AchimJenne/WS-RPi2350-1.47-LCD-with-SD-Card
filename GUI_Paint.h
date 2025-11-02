@@ -58,6 +58,8 @@ typedef enum {
 #define BROWN          0XBC40
 #define BRRED          0XFC07
 #define GRAY           0X8430
+#define DGRAY ((RED&0x3800)+(GREEN&0x01e0)+(BLUE&0x0007))
+#define LGRAY ((RED&0xc000)+(GREEN&0x0600)+(BLUE&0x0018))
 
 #define IMAGE_BACKGROUND    WHITE
 #define FONT_FOREGROUND     BLACK

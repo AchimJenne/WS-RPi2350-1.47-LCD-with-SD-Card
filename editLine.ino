@@ -13,6 +13,7 @@ bool editLine(char *psLine, char inChar)
   static unsigned char iIndx=0;
   static uint8_t iESC= 0;
   static bool bEditMode= false;
+  if ((inChar != SOH) && (inChar != NAK) && (inChar != ACK)) {
       if (inChar == '\r')       // CR key
       {
         for (unsigned int i=1; i<=(strlen(psLine)-iIndx); i++) {
@@ -130,7 +131,25 @@ bool editLine(char *psLine, char inChar)
           }
         }
       }
-    return (bEditMode);
+    } else {
+      // do not accept XModem token
+#if defined WS147GPIO || defined WS147SPI1 || defined MAKERGPIO || defined MAKERSPI1
+      pixel.fill(0x00ff00);
+      pixel.show();
+#endif      
+      Serial.write(CAN);
+      delay(50);
+      Serial.write(CAN);
+      delay(50);
+      Serial.write(CAN);
+      delay(50);
+
+#if defined WS147GPIO || defined WS147SPI1 || defined MAKERGPIO || defined MAKERSPI1
+      pixel.fill(0x000000);
+      pixel.show();
+#endif      
+    }
+  return (bEditMode);
 }
 #define EDITLINE
 #endif

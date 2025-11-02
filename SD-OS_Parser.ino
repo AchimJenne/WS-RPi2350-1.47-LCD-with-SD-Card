@@ -460,6 +460,8 @@ int fnc_HELP(const char* szCmdLn)
    Serial.println(F("TYPE"));
    Serial.println(F("VER"));
    Serial.println(F("VOL"));
+   Serial.println(F("XREC"));
+   Serial.println(F("XTRAN"));
    return( eHELP );
 }  /* end of fnc_HELP */
  
@@ -704,7 +706,7 @@ int fnc_TIME(const char* szCmdLn)
 /**************************************************/
 int fnc_TYPE(const char* szCmdLn)
 {
-   /* place your code here */
+  /* place your code here */
   char sLine[ILINE]={""};
   char* psL;
   if(strlen(szCmdLn) > 1){
@@ -740,8 +742,7 @@ int fnc_TYPE(const char* szCmdLn)
   if (SD.begin(SDCRD)) {
     File FH1 = SD.open(sLine, FILE_READ);
     if (FH1) {
-      while (FH1.available()) 
-      {
+      while (FH1.available()) {
         Serial.write(FH1.read());
       }
       Serial.print(F("\r\nFilesize: "));
@@ -823,6 +824,115 @@ int fnc_VOL(const char* szCmdLn)
 }  /* end of fnc_VOL */
  
 /**************************************************/
+/*! \brief fnc_XREC                                 
+    \param argument string: pointer of char
+    \return int- value of token
+    \ingroup token_parser */
+/**************************************************/
+int fnc_XREC(const char* szCmdLn)
+{
+   /* place your code here */
+   return( eXREC );
+}  /* end of fnc_XREC */
+
+/**************************************************/
+/*! \brief fnc_XTRAN                                
+    \param argument string: pointer of char
+    \return int- value of token
+    \ingroup token_parser */
+/**************************************************/
+int fnc_XTRAN(const char* szCmdLn)
+{
+  /* place your code here */
+  char sLine[ILINE]={""};
+  char* psL;
+  if(strlen(szCmdLn) > 1){
+    if (!strcmp(szCmdLn, " /")){
+       strcpy(sLine,"/");
+    } else
+    if (strstr(szCmdLn, " ..")) {
+      strcpy(sLine, sPath);
+      psL= strrchr(sLine, '/');
+      *psL = '\0';
+      if (strlen(sLine) <= 1) {
+        strcpy(sLine,"/");
+      }
+    } else
+    if (strstr(szCmdLn, " .")) {
+      strcpy(sLine, sPath);
+      strcat(sLine,"/");
+      strcat(sLine, szCmdLn + 2);
+    } else {  
+      strcpy(sLine, sPath);
+      if (strcmp(sLine, "/"))
+      {
+        strcat(sLine,"/");
+      }
+      strcat(sLine, szCmdLn + 1);
+    }
+  } else {
+    strcpy(sLine, sPath);
+  }
+  Serial.print(F(" : "));
+  digitalWrite(PIN_LED, 1);  
+  if (SD.begin(SDCRD)) {
+    File FH1 = SD.open(sLine, FILE_READ);
+    if (FH1) {
+      uint64_t iFSize = 0;
+      int16_t iCSum;
+      uint8_t iBlkCnt = 1;
+      uint8_t iReTr = 0; 
+      bool bTrans = false;
+      char inChar;
+      unsigned char ucBuffer[X_BLOCK_SIZE];
+      iFSize = FH1.size();
+      Serial.print(iFSize);
+      Serial.print(F(" Bytes"));
+      while (FH1.available()) {
+        while (Serial.readBytes(&inChar, 1) == 0) {  } 
+        if (((inChar == NAK) && (!bTrans)) || ((inChar == ACK) && (bTrans))) {
+            bTrans= true;
+            iCSum = 0;
+            iReTr = 0;
+            int iRdLen= FH1.read(ucBuffer, X_BLOCK_SIZE);
+            if (iRdLen > 0){
+              if (iRdLen < X_BLOCK_SIZE) {
+                for (int iL= iRdLen; iL<X_BLOCK_SIZE; iL++){
+                  ucBuffer[iL]= 0x00;
+                } /* end for */
+              } /* end if */
+              Serial.write((uint8_t) SOH);
+              Serial.write((uint8_t) iBlkCnt);
+              Serial.write((uint8_t) ~iBlkCnt);
+              for (int iL=0; iL<X_BLOCK_SIZE; iL++){
+                Serial.write(ucBuffer[iL]);
+                iCSum = iCSum + ucBuffer[iL];
+                iCSum = iCSum & 0x00ff;
+              } /* end for */
+              Serial.write((uint8_t) iCSum);
+              iBlkCnt++;
+            } else {
+
+            } /* end if */
+        } /* end if */
+      } /* end while */
+     
+      delay (10);
+      Serial.write((uint8_t) EOT);
+      delay(10);
+      FH1.close();
+    } else {
+      Serial.print(sLine);
+      Serial.println(F(" not found!"));
+    } 
+    Serial.println(F(" transferred!"));
+    SD.end();
+    digitalWrite(PIN_LED,0);
+  }
+  return( eXTRAN );
+} /* end of fnc_XTRAN */
+
+/**************************************************/
 /*! \brief fnc_TokenNotFound
     \param argument string: pointer of char
     \return always 0
@@ -853,15 +963,26 @@ int fnSDOS_Parser(char *szCmdLn)
    iCmdPos= strcspn(szCmdLn," ");
    if (iCmdPos <= 0) iCmdPos= strlen(szCmdLn);
  
-   iCmdLn= strncmp( szCmdLn, "FORMAT", (iCmdPos>(const size_t)strlen("FORMAT")? iCmdPos: (const size_t)strlen("FORMAT")));
-   if (iCmdLn < 0) // is less than FORMAT
+   // Recursion: 0; Test token no.:11 HELP
+   // multible token
+   iCmdLn= strncmp( szCmdLn, "HELP", (iCmdPos>(const size_t)strlen("HELP")? iCmdPos: (const size_t)strlen("HELP")));
+   if (iCmdLn < 0) // is less than HELP
    {
+      // search down(1,10)
+      // Recursion: 1; Test token no.:5 COPY
+      // multible token
       iCmdLn= strncmp( szCmdLn, "COPY", (iCmdPos>(const size_t)strlen("COPY")? iCmdPos: (const size_t)strlen("COPY")));
       if (iCmdLn < 0) // is less than COPY
       {
+         // search down(1,4)
+         // Recursion: 2; Test token no.:2 CD
+         // multible token
          iCmdLn= strncmp( szCmdLn, "CD", (iCmdPos>(const size_t)strlen("CD")? iCmdPos: (const size_t)strlen("CD")));
          if (iCmdLn < 0) // is less than CD
          {
+            // search down(1,1)
+            // Recursion: 3; Test token no.:1 AUTO
+            // single token
             if (strncmp( szCmdLn, "AUTO", (iCmdPos>(const size_t)strlen("AUTO")? iCmdPos: (const size_t)strlen("AUTO")))== 0)
             {
                iRet= fnc_AUTO(szCmdLn+((const size_t) strlen("AUTO")));
@@ -871,6 +992,9 @@ int fnSDOS_Parser(char *szCmdLn)
          } else {
             if (iCmdLn > 0) // is higher than CD
             {
+               // search up(2,4)
+               // Recursion: 4; Test token no.:3 CLS
+               // double token
                if (strncmp( szCmdLn, "CLS", (iCmdPos>(const size_t)strlen("CLS")? iCmdPos: (const size_t)strlen("CLS")))== 0)
                {
                   iRet= fnc_CLS(szCmdLn+((const size_t) strlen("CLS")));
@@ -892,34 +1016,48 @@ int fnSDOS_Parser(char *szCmdLn)
       } else {
          if (iCmdLn > 0) // is higher than COPY
          {
-            iCmdLn= strncmp( szCmdLn, "DEL", (iCmdPos>(const size_t)strlen("DEL")? iCmdPos: (const size_t)strlen("DEL")));
-            if (iCmdLn < 0) // is less than DEL
+            // search up(5,10)
+            // Recursion: 3; Test token no.:8 DIR
+            // multible token
+            iCmdLn= strncmp( szCmdLn, "DIR", (iCmdPos>(const size_t)strlen("DIR")? iCmdPos: (const size_t)strlen("DIR")));
+            if (iCmdLn < 0) // is less than DIR
             {
+               // search down(6,7)
+               // Recursion: 4; Test token no.:6 DATE
+               // double token
                if (strncmp( szCmdLn, "DATE", (iCmdPos>(const size_t)strlen("DATE")? iCmdPos: (const size_t)strlen("DATE")))== 0)
                {
                   iRet= fnc_DATE(szCmdLn+((const size_t) strlen("DATE")));
-               } else { //unknown token)
-                  iRet= fnc_TokenNotFound(szCmdLn);
-               } // End of(6:DATE)
-            } else {
-               if (iCmdLn > 0) // is higher than DEL
-               {
-                  if (strncmp( szCmdLn, "DIR", (iCmdPos>(const size_t)strlen("DIR")? iCmdPos: (const size_t)strlen("DIR")))== 0)
-                  {
-                     iRet= fnc_DIR(szCmdLn+((const size_t) strlen("DIR")));
-                  } else { // not DIR
-                     if (strncmp( szCmdLn, "ECHO", (iCmdPos>(const size_t)strlen("ECHO")? iCmdPos: (const size_t)strlen("ECHO")))== 0)
-                     {
-                        iRet= fnc_ECHO(szCmdLn+((const size_t) strlen("ECHO")));
-                     } else { //unknown token
-                        iRet= fnc_TokenNotFound(szCmdLn);
-                     } // End of(9:ECHO)
-                  } // End of(8:DIR)
-               } else {
-                  if (iCmdLn == 0) // Token DEL found
+               } else { // not DATE
+                  if (strncmp( szCmdLn, "DEL", (iCmdPos>(const size_t)strlen("DEL")? iCmdPos: (const size_t)strlen("DEL")))== 0)
                   {
                      iRet= fnc_DEL(szCmdLn+((const size_t) strlen("DEL")));
+                  } else { //unknown token
+                     iRet= fnc_TokenNotFound(szCmdLn);
                   } // End of(7:DEL)
+               } // End of(6:DATE)
+            } else {
+               if (iCmdLn > 0) // is higher than DIR
+               {
+                  // search up(8,10)
+                  // Recursion: 5; Test token no.:9 ECHO
+                  // double token
+                  if (strncmp( szCmdLn, "ECHO", (iCmdPos>(const size_t)strlen("ECHO")? iCmdPos: (const size_t)strlen("ECHO")))== 0)
+                  {
+                     iRet= fnc_ECHO(szCmdLn+((const size_t) strlen("ECHO")));
+                  } else { // not ECHO
+                     if (strncmp( szCmdLn, "FORMAT", (iCmdPos>(const size_t)strlen("FORMAT")? iCmdPos: (const size_t)strlen("FORMAT")))== 0)
+                     {
+                        iRet= fnc_FORMAT(szCmdLn+((const size_t) strlen("FORMAT")));
+                     } else { //unknown token
+                        iRet= fnc_TokenNotFound(szCmdLn);
+                     } // End of(10:FORMAT)
+                  } // End of(9:ECHO)
+               } else {
+                  if (iCmdLn == 0) // Token DIR found
+                  {
+                     iRet= fnc_DIR(szCmdLn+((const size_t) strlen("DIR")));
+                  } // End of(8:DIR)
                }
             }
          } else {
@@ -930,92 +1068,118 @@ int fnSDOS_Parser(char *szCmdLn)
          }
       }
    } else {
-      if (iCmdLn > 0) // is higher than FORMAT
+      if (iCmdLn > 0) // is higher than HELP
       {
-         iCmdLn= strncmp( szCmdLn, "REN", (iCmdPos>(const size_t)strlen("REN")? iCmdPos: (const size_t)strlen("REN")));
-         if (iCmdLn < 0) // is less than REN
+         // search up(11,22)
+         // Recursion: 2; Test token no.:17 TIME
+         // multible token
+         iCmdLn= strncmp( szCmdLn, "TIME", (iCmdPos>(const size_t)strlen("TIME")? iCmdPos: (const size_t)strlen("TIME")));
+         if (iCmdLn < 0) // is less than TIME
          {
-            iCmdLn= strncmp( szCmdLn, "MD", (iCmdPos>(const size_t)strlen("MD")? iCmdPos: (const size_t)strlen("MD")));
-            if (iCmdLn < 0) // is less than MD
+            // search down(12,16)
+            // Recursion: 3; Test token no.:14 RD
+            // multible token
+            iCmdLn= strncmp( szCmdLn, "RD", (iCmdPos>(const size_t)strlen("RD")? iCmdPos: (const size_t)strlen("RD")));
+            if (iCmdLn < 0) // is less than RD
             {
-               if (strncmp( szCmdLn, "HELP", (iCmdPos>(const size_t)strlen("HELP")? iCmdPos: (const size_t)strlen("HELP")))== 0)
+               // search down(12,13)
+               // Recursion: 4; Test token no.:12 MD
+               // double token
+               if (strncmp( szCmdLn, "MD", (iCmdPos>(const size_t)strlen("MD")? iCmdPos: (const size_t)strlen("MD")))== 0)
                {
-                  iRet= fnc_HELP(szCmdLn+((const size_t) strlen("HELP")));
-               } else { //unknown token)
-                  iRet= fnc_TokenNotFound(szCmdLn);
-               } // End of(11:HELP)
-            } else {
-               if (iCmdLn > 0) // is higher than MD
-               {
+                  iRet= fnc_MD(szCmdLn+((const size_t) strlen("MD")));
+               } else { // not MD
                   if (strncmp( szCmdLn, "PATH", (iCmdPos>(const size_t)strlen("PATH")? iCmdPos: (const size_t)strlen("PATH")))== 0)
                   {
                      iRet= fnc_PATH(szCmdLn+((const size_t) strlen("PATH")));
-                  } else { // not PATH
-                     if (strncmp( szCmdLn, "RD", (iCmdPos>(const size_t)strlen("RD")? iCmdPos: (const size_t)strlen("RD")))== 0)
+                  } else { //unknown token
+                     iRet= fnc_TokenNotFound(szCmdLn);
+                  } // End of(13:PATH)
+               } // End of(12:MD)
+            } else {
+               if (iCmdLn > 0) // is higher than RD
+               {
+                  // search up(14,16)
+                  // Recursion: 5; Test token no.:15 REN
+                  // double token
+                  if (strncmp( szCmdLn, "REN", (iCmdPos>(const size_t)strlen("REN")? iCmdPos: (const size_t)strlen("REN")))== 0)
+                  {
+                     iRet= fnc_REN(szCmdLn+((const size_t) strlen("REN")));
+                  } else { // not REN
+                     if (strncmp( szCmdLn, "TEMP", (iCmdPos>(const size_t)strlen("TEMP")? iCmdPos: (const size_t)strlen("TEMP")))== 0)
                      {
-                        iRet= fnc_RD(szCmdLn+((const size_t) strlen("RD")));
+                        iRet= fnc_TEMP(szCmdLn+((const size_t) strlen("TEMP")));
                      } else { //unknown token
                         iRet= fnc_TokenNotFound(szCmdLn);
-                     } // End of(14:RD)
-                  } // End of(13:PATH)
+                     } // End of(16:TEMP)
+                  } // End of(15:REN)
                } else {
-                  if (iCmdLn == 0) // Token MD found
+                  if (iCmdLn == 0) // Token RD found
                   {
-                     iRet= fnc_MD(szCmdLn+((const size_t) strlen("MD")));
-                  } // End of(12:MD)
+                     iRet= fnc_RD(szCmdLn+((const size_t) strlen("RD")));
+                  } // End of(14:RD)
                }
             }
          } else {
-            if (iCmdLn > 0) // is higher than REN
+            if (iCmdLn > 0) // is higher than TIME
             {
-               iCmdLn= strncmp( szCmdLn, "TYPE", (iCmdPos>(const size_t)strlen("TYPE")? iCmdPos: (const size_t)strlen("TYPE")));
-               if (iCmdLn < 0) // is less than TYPE
+               // search up(17,22)
+               // Recursion: 4; Test token no.:20 VOL
+               // multible token
+               iCmdLn= strncmp( szCmdLn, "VOL", (iCmdPos>(const size_t)strlen("VOL")? iCmdPos: (const size_t)strlen("VOL")));
+               if (iCmdLn < 0) // is less than VOL
                {
-                  if (strncmp( szCmdLn, "TEMP", (iCmdPos>(const size_t)strlen("TEMP")? iCmdPos: (const size_t)strlen("TEMP")))== 0)
+                  // search down(18,19)
+                  // Recursion: 5; Test token no.:18 TYPE
+                  // double token
+                  if (strncmp( szCmdLn, "TYPE", (iCmdPos>(const size_t)strlen("TYPE")? iCmdPos: (const size_t)strlen("TYPE")))== 0)
                   {
-                     iRet= fnc_TEMP(szCmdLn+((const size_t) strlen("TEMP")));
-                  } else { // not TEMP
-                     if (strncmp( szCmdLn, "TIME", (iCmdPos>(const size_t)strlen("TIME")? iCmdPos: (const size_t)strlen("TIME")))== 0)
-                     {
-                        iRet= fnc_TIME(szCmdLn+((const size_t) strlen("TIME")));
-                     } else { //unknown token
-                        iRet= fnc_TokenNotFound(szCmdLn);
-                     } // End of(17:TIME)
-                  } // End of(16:TEMP)
-               } else {
-                  if (iCmdLn > 0) // is higher than TYPE
-                  {
+                     iRet= fnc_TYPE(szCmdLn+((const size_t) strlen("TYPE")));
+                  } else { // not TYPE
                      if (strncmp( szCmdLn, "VER", (iCmdPos>(const size_t)strlen("VER")? iCmdPos: (const size_t)strlen("VER")))== 0)
                      {
                         iRet= fnc_VER(szCmdLn+((const size_t) strlen("VER")));
-                     } else { // not VER
-                        if (strncmp( szCmdLn, "VOL", (iCmdPos>(const size_t)strlen("VOL")? iCmdPos: (const size_t)strlen("VOL")))== 0)
+                     } else { //unknown token
+                        iRet= fnc_TokenNotFound(szCmdLn);
+                     } // End of(19:VER)
+                  } // End of(18:TYPE)
+               } else {
+                  if (iCmdLn > 0) // is higher than VOL
+                  {
+                     // search up(20,22)
+                     // Recursion: 6; Test token no.:21 XREC
+                     // double token
+                     if (strncmp( szCmdLn, "XREC", (iCmdPos>(const size_t)strlen("XREC")? iCmdPos: (const size_t)strlen("XREC")))== 0)
+                     {
+                        iRet= fnc_XREC(szCmdLn+((const size_t) strlen("XREC")));
+                     } else { // not XREC
+                        if (strncmp( szCmdLn, "XTRAN", (iCmdPos>(const size_t)strlen("XTRAN")? iCmdPos: (const size_t)strlen("XTRAN")))== 0)
                         {
-                           iRet= fnc_VOL(szCmdLn+((const size_t) strlen("VOL")));
+                           iRet= fnc_XTRAN(szCmdLn+((const size_t) strlen("XTRAN")));
                         } else { //unknown token
                            iRet= fnc_TokenNotFound(szCmdLn);
-                        } // End of(20:VOL)
-                     } // End of(19:VER)
+                        } // End of(22:XTRAN)
+                     } // End of(21:XREC)
                   } else {
-                     if (iCmdLn == 0) // Token TYPE found
+                     if (iCmdLn == 0) // Token VOL found
                      {
-                        iRet= fnc_TYPE(szCmdLn+((const size_t) strlen("TYPE")));
-                     } // End of(18:TYPE)
+                        iRet= fnc_VOL(szCmdLn+((const size_t) strlen("VOL")));
+                     } // End of(20:VOL)
                   }
                }
             } else {
-               if (iCmdLn == 0) // Token REN found
+               if (iCmdLn == 0) // Token TIME found
                {
-                  iRet= fnc_REN(szCmdLn+((const size_t) strlen("REN")));
-               } // End of(15:REN)
+                  iRet= fnc_TIME(szCmdLn+((const size_t) strlen("TIME")));
+               } // End of(17:TIME)
             }
          }
       } else {
-         if (iCmdLn == 0) // Token FORMAT found
+         if (iCmdLn == 0) // Token HELP found
          {
-            iRet= fnc_FORMAT(szCmdLn+((const size_t) strlen("FORMAT")));
-         } // End of(10:FORMAT)
+            iRet= fnc_HELP(szCmdLn+((const size_t) strlen("HELP")));
+         } // End of(11:HELP)
       }
    }
    return(iRet);
-} /* end of function fnSDOS_Parser */ 
+} /* end of function fnSDOS_Parser */
