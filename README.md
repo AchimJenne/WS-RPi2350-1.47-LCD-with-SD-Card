@@ -22,7 +22,7 @@ The function are :
 
 **VOL** - list the SD-Card information
 
-**XTRAN** - file transfer from mircocontroller to host vie XMODEM protocol
+**XTRAN** - file transfer from mircocontroller to host via XMODEM protocol
 
 
 Some of the Waveshare LCD- functions are modified and the memory transfer to the LCD are fixed. 
