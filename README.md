@@ -27,3 +27,4 @@ Available commands are :
 
 Some of the Waveshare LCD- functions are modified and the memory transfer to the LCD are fixed. 
 ![IMG_1962-1_cut_comp](https://github.com/user-attachments/assets/44041312-dc29-402c-8022-37abfc868a69)
+![IMG_0584_cut_comp](https://github.com/user-attachments/assets/25883f65-68be-4058-8885-b6e8334d9b79)
