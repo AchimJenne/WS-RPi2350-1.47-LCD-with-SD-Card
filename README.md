@@ -1,6 +1,10 @@
 # WS-RPi2350-1.47-LCD-with-SD-Card
 Arduino: RPi2350 1.47 LCD with SD-Card on GPIO- Interface. The actual version shows some System informations and an analog clock.
-This project based on the Waveshare RP2350 board witch LCD, RGB-LED and SD- Card. It is really a compact board with a small and nice LCD.
+![Pico_SD-OS](https://github.com/user-attachments/assets/2fbff618-61a3-431b-95c4-c61678a272d7)
+
+This project based on the Waveshare RP2350 board witch 1.47in LCD, RGB-LED and SD- Card. It is really a compact board with a small and nice LCD.
+But it should work with other Boards in different configurations.
+
 Available commands are :
 **CD, MD, RD** - directory handling
 
@@ -28,3 +32,6 @@ Available commands are :
 Some of the Waveshare LCD- functions are modified and the memory transfer to the LCD are fixed. 
 ![IMG_1962-1_cut_comp](https://github.com/user-attachments/assets/44041312-dc29-402c-8022-37abfc868a69)
 ![IMG_0584_cut_comp](https://github.com/user-attachments/assets/25883f65-68be-4058-8885-b6e8334d9b79)
+
+Software was tested with some other Raspberry Picos and Pico II
+![IMG_0591_cut_comp](https://github.com/user-attachments/assets/859e0a6f-6c51-4a00-8087-96e6e0bd9fa5)
