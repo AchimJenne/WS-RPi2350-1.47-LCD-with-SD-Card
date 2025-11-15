@@ -29,7 +29,7 @@
 #define SDSPI SPI1
 #define SDCRD PIN_SS,SPI1
 #elif defined MAKERSPI1
-#define SDSPD 40
+#define SDSPD 16
 #define PIN_MISO 12
 #define PIN_MOSI 11
 #define PIN_SCK 10
@@ -51,10 +51,10 @@
 #define SDSPI SPI1
 #define SDCRD PIN_SS,SPI1
 #elif defined WS147SPI1
-/*! \brief WS147SPI1 (the Waveshare Pico 2 with 1.47 In.)                                
+/*! \brief WS1.47 SD-Card on SPI1 (the Waveshare Pico 2 with 1.47 In.)                                
     \ingroup SDOS_PICO 
     */
-#define SDSPD 40
+#define SDSPD 25
 #define PIN_MISO 12
 #define PIN_MOSI 11
 #define PIN_SCK 10

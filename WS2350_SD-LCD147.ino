@@ -21,10 +21,6 @@ enum eCmdSt {eNoToken=0,
 #include <stdio.h>
 #include <time.h>
 #include <sys/time.h>
-//#include <arduino.h>
-//#include <string.h>
-
-//#include "pico/stdlib.h"
 #include "I2C_RTC.h"
 #include "DEV_Config.h"
 #include "GUI_Paint.h"
@@ -43,7 +39,7 @@ char sPath[ILINE]={"/"};
 volatile bool bAuto = false;
 bool bRTC = false;
 bool bSDCRD;
-time_t tiUxOld, tiUx= (1762005636+1800);  // date of SW- Release;
+time_t tiUxOld, tiUx; // for date of SW- Release;
 
 struct timeval tiV;
 uint16_t *BlackImage;
@@ -55,7 +51,7 @@ Adafruit_NeoPixel pixel(1, RGB_PIN, NEO_GRB + NEO_KHZ800);
 const int RGB_PIN = 28;
 Adafruit_NeoPixel pixel(1, RGB_PIN, NEO_GRB + NEO_KHZ800);
 #endif
-//#define F2PI 3.1415926535*2/360.0
+
 #define SECTICK 60
 // sinus and cosinus table for wath hand on clock face 
 float sinTab[SECTICK];
@@ -66,6 +62,7 @@ float cosTab[SECTICK];
 void setup() {
   // put your setup code here, to run once:
   char sLine[ILINE];
+  struct tm mytm;
   Serial.begin(115200);
   // wait on Serial to be available on Leonardo
   while (!Serial){
@@ -106,16 +103,18 @@ void setup() {
   delay(10);  
 #endif
 
-#if defined(MAKERGPIO) || defined(WS147GPIO)
+#if defined(WS147GPIO) || defined(WS147SPI1)
   for (int i=0; i<SECTICK; i++) {
     sinTab[i]= sin((i*6 - 90) * DEG_TO_RAD);
     cosTab[i]= cos((i*6 - 90) * DEG_TO_RAD);
   }
 #else
+#if not defined(MAKERGPIO)
   SDSPI.setMISO(PIN_MISO);
   SDSPI.setMOSI(PIN_MOSI);
   SDSPI.setSCK(PIN_SCK);
   SDSPI.beginTransaction(SPISettings(SD_SCK_MHZ(SDSPD), MSBFIRST, SPI_MODE0)); 
+#endif
 #endif
   Serial.print(F("Init SD-Card  ... "));
   bool bInitSD = false;
@@ -144,8 +143,14 @@ void setup() {
       RTC.setHourMode(CLOCK_H24);
     }
     /* load internal RTC from external RTC */
-    tiV.tv_sec = dateTime2Unix(RTC.getYear(),RTC.getMonth(),RTC.getDay(),RTC.getHours(),RTC.getMinutes(),RTC.getSeconds()) ; 
-    tiV.tv_usec = 0;
+    mytm.tm_year = RTC.getYear() -1900;
+    mytm.tm_mon  = RTC.getMonth() -1;
+    mytm.tm_mday = RTC.getDay(); 
+    mytm.tm_hour = RTC.getHours();
+    mytm.tm_min  = RTC.getMinutes();
+    mytm.tm_sec  = RTC.getSeconds();
+    tiV.tv_sec   = mktime(&mytm);
+    tiV.tv_usec  = 0;
     settimeofday(&tiV, nullptr);
   
     Serial.print(F("RTC- Temperature:  "));
@@ -156,17 +161,26 @@ void setup() {
                    RTC.getHours(), RTC.getMinutes(), RTC.getSeconds()); 
     Serial.println(sLine); 
   } else {
+    // set internal RTC to SW build date and time
+    char sMon[5];
+    sscanf( __DATE__, "%3s %2d %4d", &sMon, &day, &year);
+    mytm.tm_year = year -1900;
+    mytm.tm_mon = func_MonParser(&sMon[0]) -1;
+    mytm.tm_mday = day;
+    sscanf( __TIME__, "%02d:%02d:%02d", &hour, &minute, &second);
+    mytm.tm_hour = hour;
+    mytm.tm_min  = minute;
+    mytm.tm_sec  = second; 
+    tiUx = mktime(&mytm);
     tiV.tv_sec = tiUx;
     tiV.tv_usec = 0;
-    settimeofday(&tiV, nullptr);
+    settimeofday(&tiV, nullptr);    
   }
 
   time(&tiUx); 
   Serial.print(F("Pico internal RTC: "));
   strftime(sLine, sizeof(sLine), "%0d.%0m.20%0y %0H:%0M:%0S", localtime(&tiUx));
   Serial.println(sLine);
-  // strftime(sLine, sizeof(sLine), " %0d %B 20%0y (%A) %0H:%0M:%0S", localtime(&tiUx));
-  // Serial.println(sLine);
 
   /* LCD Init */
 #if defined WS147GPIO || defined WS147SPI1   
@@ -194,7 +208,6 @@ void setup() {
   pixel.begin();
   pixel.setBrightness(100);
 #endif
-
   Serial.print(sPath);
   Serial.print(F(">"));
 }
@@ -210,6 +223,8 @@ void loop() {
   // put your main code here, to run repeatedly:
   if (Serial.available()) { 
     inChar = (char) Serial.read();
+    // sprintf(sLine,"%2X (%3d)", inChar, inChar);
+    // Serial.println(sLine);
     if (bEM= editLine(psLine, inChar)) {
       /************************************************************/
       // if command

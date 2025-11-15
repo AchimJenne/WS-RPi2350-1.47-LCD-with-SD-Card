@@ -32,35 +32,8 @@ int fnc_AUTO(const char* szCmdLn)
 int fnc_CD(const char* szCmdLn)
 {
   /* place your code here */
-  char sLine[ILINE]={""};
-  char* psL;
-  if(strlen(szCmdLn) > 1){
-    if (!strcmp(szCmdLn, " /")){
-       strcpy(sLine,"/");
-    } else
-    if (strstr(szCmdLn, " ..")) {
-      strcpy(sLine, sPath);
-      psL= strrchr(sLine, '/');
-      *psL = '\0';
-      if (strlen(sLine) <= 1) {
-        strcpy(sLine,"/");
-      }
-    } else
-    if (strstr(szCmdLn, " .")) {
-      strcpy(sLine, sPath);
-      strcat(sLine,"/");
-      strcat(sLine, szCmdLn + 2);
-    } else {  
-      strcpy(sLine, sPath);
-      if (strcmp(sLine, "/"))
-      {
-        strcat(sLine,"/");
-      }
-      strcat(sLine, szCmdLn + 1);
-    }
-  } else {
-    strcpy(sLine, sPath);
-  }
+  char sLine[ILINE];
+  argPathFn( szCmdLn, &sLine[0]);
   if (SD.begin( SDCRD)) 
   {
     digitalWrite(PIN_LED, 1);
@@ -102,21 +75,25 @@ int fnc_COPY(const char* szCmdLn)
   /* place your code here */
   File FH1, FH2;
   char sFnTo[ILINE];
+  char *psFnTo= &sFnTo[0];
   char sFnFrom[ILINE];
-  char s1[40], s2[40];
-  #define IBUFFER 64
+  char s1[20], s2[20];
+  #define IBUFFER 256
   char cBuff[IBUFFER];
 
   szCmdLn++;
   int iRet= sscanf(szCmdLn,"%s %s", &s1, &s2);
   if (iRet ==2) {
-    strcpy(sFnFrom, sPath);
-    strcat(sFnFrom, "/");
-    strcat(sFnFrom, s1);
-    strcpy(sFnTo, sPath);
-    strcat(sFnTo, "/");
-    strcat(sFnTo, s2);
-
+    argPathFn( &s1[0], &sFnFrom[0]);
+    if (strncmp(s2, ".", 1) ==0) {
+      strncpy(psFnTo, sPath, ILINE-1);
+      strncat(psFnTo, "/", ILINE);
+      strncat(psFnTo, (strrchr(s1, '/')+1), ILINE-1);
+      Serial.println();  
+      Serial.println(psFnTo);
+    } else {
+      argPathFn( &s2[0], &sFnTo[0]);
+    }
     if (SD.begin( SDCRD)) 
     {
       digitalWrite(PIN_LED, 1);
@@ -242,17 +219,13 @@ int fnc_DATE(const char* szCmdLn)
   if (strlen(szCmdLn) >= 8){
     int16_t iResult= sscanf( szCmdLn,"%02d.%02d.%04d", &day, &mon, &year);   
     if (iResult == 3) {
+      mytm.tm_year = year -1900;
+      mytm.tm_mon  = mon -1;
+      mytm.tm_mday = day;     
       if (bRTC) {
         RTC.setDate((uint8_t) day, (uint8_t) mon, (uint16_t) year);
-        hour  = RTC.getHours();
-        minute= RTC.getMinutes();
-        second= RTC.getSeconds();
-      } else {
-        hour  = mytm.tm_hour;
-        minute= mytm.tm_min;
-        second= mytm.tm_sec;
       }
-      tiV.tv_sec = dateTime2Unix( year, mon, day, hour, minute, second); 
+      tiV.tv_sec = mktime(&mytm);
       tiV.tv_usec = 0;
       settimeofday(&tiV, nullptr);
     }
@@ -280,35 +253,8 @@ int fnc_DATE(const char* szCmdLn)
 int fnc_DEL(const char* szCmdLn)
 {
   /* place your code here */
-  char sLine[ILINE]={""};
-  char* psL;
-  if(strlen(szCmdLn) > 1){
-    if (!strcmp(szCmdLn, " /")){
-       strcpy(sLine,"/");
-    } else
-    if (strstr(szCmdLn, " ..")) {
-      strcpy(sLine, sPath);
-      psL= strrchr(sLine, '/');
-      *psL = '\0';
-      if (strlen(sLine) <= 1) {
-        strcpy(sLine,"/");
-      }
-    } else
-    if (strstr(szCmdLn, " .")) {
-      strcpy(sLine, sPath);
-      strcat(sLine,"/");
-      strcat(sLine, szCmdLn + 2);
-    } else {  
-      strcpy(sLine, sPath);
-      if (strcmp(sLine, "/"))
-      {
-        strcat(sLine,"/");
-      }
-      strcat(sLine, szCmdLn + 1);
-    }
-  } else {
-    strcpy(sLine, sPath);
-  }
+  char sLine[ILINE];
+  argPathFn( szCmdLn, &sLine[0]);
   Serial.print(F(" : "));
   if (SD.begin(SDCRD))
   {
@@ -320,7 +266,7 @@ int fnc_DEL(const char* szCmdLn)
       {
         Serial.print(F("removed"));
       } else {
-        Serial.print(F("not removed!"));
+        Serial.print(F("not removed"));
       }
     } else {
       Serial.print(F("not Found"));
@@ -345,14 +291,27 @@ void printDirectory(File dir, int numTabs) {
       Serial.print(i*2);
       Serial.print("C");
     }
+    int iLen = strlen(entry.name());
     Serial.print(entry.name());
     if (entry.isDirectory())   // files have sizes, directories do not
     {
-      Serial.println(F("\\\e[28G\e[1m<Dir>\e[0m"));
+      Serial.print(F("\\\e["));
+      if (iLen <= 27) {
+        Serial.print(28);
+      } else {
+        Serial.print(iLen + 2);
+      }
+      Serial.println(F("G\e[1m<Dir>\e[0m"));
       // printDirectory(entry, numTabs + 1);  // uncommend for recursive funcion call
     } else
     if (entry.isFile()) {
-      Serial.print(F("\e[24G"));
+      Serial.print(F("\e["));
+      if (iLen <= 23) {
+        Serial.print(F("24"));
+      } else {
+        Serial.print(iLen + 2);
+      }
+      Serial.print(F("G"));
       Serial.print(entry.size(), DEC);
       Serial.println(F(" Byte"));
     }
@@ -364,11 +323,7 @@ int fnc_DIR(const char* szCmdLn)
 {
   /* place your code here */
   char sLine[ILINE];
-  if (strlen(szCmdLn)>1){
-    strcpy(sLine, szCmdLn+1);
-  } else {
-    strcpy(sLine, sPath);
-  }
+  argPathFn( szCmdLn, &sLine[0]);
   Serial.println(F(" : "));
   if (SD.begin(SDCRD)) 
   {
@@ -437,32 +392,31 @@ int fnc_FORMAT(const char* szCmdLn)
 /**************************************************/
 int fnc_HELP(const char* szCmdLn)
 {
-   /* place your code here */
-   Serial.println(F(" :"));
-   Serial.println(F("AUTO"));
-   Serial.println(F("CLS"));
-   Serial.println(F("CONFIG"));
-   Serial.println(F("COPY"));
-   Serial.println(F("DATE"));
-   Serial.println(F("DEL"));
-   Serial.println(F("DIR"));
-   Serial.println(F("ECHO"));
-   Serial.println(F("FORMAT"));
-   Serial.println(F("HELP"));
-   Serial.println(F("PATH"));
-   Serial.println(F("REM"));
-   Serial.println(F("REN"));
-   Serial.println(F("CD"));
-   Serial.println(F("MD"));
-   Serial.println(F("RD"));
-   Serial.println(F("TIME"));
-   Serial.println(F("TEMP"));
-   Serial.println(F("TYPE"));
-   Serial.println(F("VER"));
-   Serial.println(F("VOL"));
-   Serial.println(F("XREC"));
-   Serial.println(F("XTRAN"));
-   return( eHELP );
+  /* place your code here */
+  Serial.println(F(" :"));
+  Serial.println(F("AUTO"));
+  Serial.println(F("CLS\t clearscreen"));
+  Serial.println(F("CONFIG\t display configuration"));
+  Serial.println(F("COPY\t copy file; <src> <targ>"));
+  Serial.println(F("DATE\t display/set date; format <DD.MM.YYYY>"));
+  Serial.println(F("DEL\t delete file"));
+  Serial.println(F("DIR\t display directory"));
+  Serial.println(F("ECHO\t copy argument into logfile"));
+  Serial.println(F("FORMAT\t <func. not available>"));
+  Serial.println(F("HELP\t this help informations"));
+  Serial.println(F("PATH\t display actual path"));
+  Serial.println(F("REN\t rename file; <src> <targ>"));
+  Serial.println(F("CD\t change directory"));
+  Serial.println(F("MD\t make directory"));
+  Serial.println(F("RD\t remove directory"));
+  Serial.println(F("TIME\t display/set time; format <hh.mm.ss>"));
+  Serial.println(F("TEMP\t display temperature(s)"));
+  Serial.println(F("TYPE\t display ASCII-file"));
+  Serial.println(F("VER\t display SW- Version"));
+  Serial.println(F("VOL\t display SD-Card informations"));
+  Serial.println(F("XREC\t XModem- download to uC"));
+  Serial.println(F("XTRAN\t XModem- upload"));
+  return( eHELP );
 }  /* end of fnc_HELP */
  
 /**************************************************/
@@ -474,35 +428,8 @@ int fnc_HELP(const char* szCmdLn)
 int fnc_MD(const char* szCmdLn)
 {
    /* place your code here */
-  char sLine[ILINE]={""};
-  char* psL;
-  if(strlen(szCmdLn) > 1){
-    if (!strcmp(szCmdLn, " /")){
-       strcpy(sLine,"/");
-    } else
-    if (strstr(szCmdLn, " ..")) {
-      strcpy(sLine, sPath);
-      psL= strrchr(sLine, '/');
-      *psL = '\0';
-      if (strlen(sLine) <= 1) {
-        strcpy(sLine,"/");
-      }
-    } else
-    if (strstr(szCmdLn, " .")) {
-      strcpy(sLine, sPath);
-      strcat(sLine,"/");
-      strcat(sLine, szCmdLn + 2);
-    } else {  
-      strcpy(sLine, sPath);
-      if (strcmp(sLine, "/"))
-      {
-        strcat(sLine,"/");
-      }
-      strcat(sLine, szCmdLn + 1);
-    }
-  } else {
-    strcpy(sLine, sPath);
-  }
+  char sLine[ILINE];
+  argPathFn( szCmdLn, &sLine[0]);
   Serial.print(F(" : "));
   digitalWrite(PIN_LED, 1);
   if (SD.begin(SDCRD)) {
@@ -545,35 +472,8 @@ int fnc_PATH(const char* szCmdLn)
 int fnc_RD(const char* szCmdLn)
 {
   /* place your code here */
-  char sLine[ILINE]={""};
-  char* psL;
-  if(strlen(szCmdLn) > 1){
-    if (!strcmp(szCmdLn, " /")){
-       strcpy(sLine,"/");
-    } else
-    if (strstr(szCmdLn, " ..")) {
-      strcpy(sLine, sPath);
-      psL= strrchr(sLine, '/');
-      *psL = '\0';
-      if (strlen(sLine) <= 1) {
-        strcpy(sLine,"/");
-      }
-    } else
-    if (strstr(szCmdLn, " .")) {
-      strcpy(sLine, sPath);
-      strcat(sLine,"/");
-      strcat(sLine, szCmdLn + 2);
-    } else {  
-      strcpy(sLine, sPath);
-      if (strcmp(sLine, "/"))
-      {
-        strcat(sLine,"/");
-      }
-      strcat(sLine, szCmdLn + 1);
-    }
-  } else {
-    strcpy(sLine, sPath);
-  }
+  char sLine[ILINE];
+  argPathFn( szCmdLn, &sLine[0]);
   Serial.print(F(" : "));
   digitalWrite(PIN_LED, 1);
   if (SD.begin(SDCRD)) {
@@ -669,18 +569,12 @@ int fnc_TIME(const char* szCmdLn)
     if (iResult == 3) {
       if (bRTC) {
         RTC.setTime((uint8_t) hour, (uint8_t) minute, (uint8_t) second);
-      } 
+      }
+      mytm.tm_hour = hour;
+      mytm.tm_min  = minute;
+      mytm.tm_sec  = second; 
     } 
-    if (bRTC) {
-      year = RTC.getYear();
-      mon =  RTC.getMonth();
-      day =  RTC.getDay();
-    } else {
-      year = mytm.tm_year + 1900; 
-      mon =  mytm.tm_mon + 1;
-      day =  mytm.tm_mday;
-    }
-    tiV.tv_sec = dateTime2Unix( year, mon, day, hour, minute, second); 
+    tiV.tv_sec = mktime(&mytm);
     tiV.tv_usec = 0;
     settimeofday(&tiV, nullptr);
   } else {
@@ -707,35 +601,8 @@ int fnc_TIME(const char* szCmdLn)
 int fnc_TYPE(const char* szCmdLn)
 {
   /* place your code here */
-  char sLine[ILINE]={""};
-  char* psL;
-  if(strlen(szCmdLn) > 1){
-    if (!strcmp(szCmdLn, " /")){
-       strcpy(sLine,"/");
-    } else
-    if (strstr(szCmdLn, " ..")) {
-      strcpy(sLine, sPath);
-      psL= strrchr(sLine, '/');
-      *psL = '\0';
-      if (strlen(sLine) <= 1) {
-        strcpy(sLine,"/");
-      }
-    } else
-    if (strstr(szCmdLn, " .")) {
-      strcpy(sLine, sPath);
-      strcat(sLine,"/");
-      strcat(sLine, szCmdLn + 2);
-    } else {  
-      strcpy(sLine, sPath);
-      if (strcmp(sLine, "/"))
-      {
-        strcat(sLine,"/");
-      }
-      strcat(sLine, szCmdLn + 1);
-    }
-  } else {
-    strcpy(sLine, sPath);
-  }
+  char sLine[ILINE];
+  argPathFn( szCmdLn, &sLine[0]);
   Serial.print(F(" : "));
   Serial.println(sLine);
   digitalWrite(PIN_LED,1);
@@ -844,35 +711,8 @@ int fnc_XREC(const char* szCmdLn)
 int fnc_XTRAN(const char* szCmdLn)
 {
   /* place your code here */
-  char sLine[ILINE]={""};
-  char* psL;
-  if(strlen(szCmdLn) > 1){
-    if (!strcmp(szCmdLn, " /")){
-       strcpy(sLine,"/");
-    } else
-    if (strstr(szCmdLn, " ..")) {
-      strcpy(sLine, sPath);
-      psL= strrchr(sLine, '/');
-      *psL = '\0';
-      if (strlen(sLine) <= 1) {
-        strcpy(sLine,"/");
-      }
-    } else
-    if (strstr(szCmdLn, " .")) {
-      strcpy(sLine, sPath);
-      strcat(sLine,"/");
-      strcat(sLine, szCmdLn + 2);
-    } else {  
-      strcpy(sLine, sPath);
-      if (strcmp(sLine, "/"))
-      {
-        strcat(sLine,"/");
-      }
-      strcat(sLine, szCmdLn + 1);
-    }
-  } else {
-    strcpy(sLine, sPath);
-  }
+  char sLine[ILINE];
+  argPathFn( szCmdLn, &sLine[0]);
   Serial.print(F(" : "));
   digitalWrite(PIN_LED, 1);  
   if (SD.begin(SDCRD)) {

@@ -19,11 +19,6 @@
 //#define UNIX_OFFSET 0 // Temp Workaround
 //#endif
 
-//define all the rtc clocks.
-//#define DS1307_H
-//#define DS3231_H
-//#define PCF8563_H
-
 #define INVALID -1
 
 #define CLOCK_H24 0
@@ -157,8 +152,5 @@ class DS3231 {
 
 /* Instantiate class
 static DS3231 RTC;
-static DS1307 RTC;
-static NVRAM NVRAM;
-static PCF8563 RTC;
 */
 #endif   /* RTC_H */
