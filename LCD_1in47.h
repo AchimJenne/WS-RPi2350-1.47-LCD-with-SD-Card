@@ -13,13 +13,10 @@
 ******************************************************************************/
 #ifndef __LCD_1IN47_H
 #define __LCD_1IN47_H	
-	
 #include "DEV_Config.h"
 #include <stdint.h>
-
 #include <stdlib.h>     //itoa()
 #include <stdio.h>
-
 #define LCD_1IN47_HEIGHT 172
 #define LCD_1IN47_WIDTH 320
 
@@ -35,10 +32,10 @@ typedef struct{
 }LCD_1IN47_ATTRIBUTES;
 extern LCD_1IN47_ATTRIBUTES LCD_1IN47;
 
-/********************************************************************************
+/*******************************************************************************
 function:	
 			Macro definition variable name
-********************************************************************************/
+*******************************************************************************/
 void LCD_1IN47_Init(UBYTE Scan_dir);
 void LCD_1IN47_Clear(UWORD Color);
 void LCD_1IN47_Display(UWORD *Image);

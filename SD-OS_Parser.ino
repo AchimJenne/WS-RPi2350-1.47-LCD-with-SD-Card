@@ -1,4 +1,4 @@
-  #include "SD-OS_Pico.h"
+#include "SD-OS_Pico.h"
 
 /**************************************************/
 /*! \brief fnc_AUTO                                 
@@ -217,7 +217,7 @@ int fnc_DATE(const char* szCmdLn)
   clk= time(nullptr);
   mytm= *localtime(&clk);
   if (strlen(szCmdLn) >= 8){
-    int16_t iResult= sscanf( szCmdLn,"%02d.%02d.%04d", &day, &mon, &year);   
+    int16_t iResult= sscanf( szCmdLn, "%02d.%02d.%04d", &day, &mon, &year);   
     if (iResult == 3) {
       mytm.tm_year = year -1900;
       mytm.tm_mon  = mon -1;
@@ -302,7 +302,7 @@ void printDirectory(File dir, int numTabs) {
         Serial.print(iLen + 2);
       }
       Serial.println(F("G\e[1m<Dir>\e[0m"));
-      // printDirectory(entry, numTabs + 1);  // uncommend for recursive funcion call
+      // printDirectory(entry, numTabs + 1);  
     } else
     if (entry.isFile()) {
       Serial.print(F("\e["));
@@ -376,7 +376,6 @@ int fnc_FORMAT(const char* szCmdLn)
   Serial.println(F(" : "));
   if (SD.begin(SDCRD)) {
     digitalWrite(PIN_LED, 1);
-    //bool stFS= SD.format(); // 
     Serial.println(F("A \"format\" function was not implemented"));
     SD.end();
     digitalWrite(PIN_LED, 0);
@@ -509,13 +508,9 @@ int fnc_REN(const char* szCmdLn)
   Serial.print(F(" : "));
   szCmdLn++;
   int iRet= sscanf(szCmdLn,"%s %s", &s1, &s2);
-  if (iRet ==2) {
-    strcpy(sFrom, sPath);
-    strcat(sFrom, "/");
-    strcat(sFrom, s1);
-    strcpy(sTo, sPath);
-    strcat(sTo, "/");
-    strcat(sTo, s2);
+  if (iRet == 2) {
+    argPathFn( &s1[0], &sFrom[0]);
+    argPathFn( &s2[0], &sTo[0]);
     if (SD.begin( SDCRD)) {
       digitalWrite(PIN_LED, 1);
       bool stFS= SD.rename(sFrom, sTo);
@@ -573,7 +568,16 @@ int fnc_TIME(const char* szCmdLn)
       mytm.tm_hour = hour;
       mytm.tm_min  = minute;
       mytm.tm_sec  = second; 
-    } 
+    } else  
+    if (iResult == 2) {
+      if (bRTC) {
+        RTC.setHours((uint8_t)hour);
+        RTC.setMinutes((uint8_t)minute);
+        //RTC.setTime((uint8_t) hour, (uint8_t) minute, (uint8_t) second);
+      }
+      mytm.tm_hour = hour;
+      mytm.tm_min  = minute;
+    }
     tiV.tv_sec = mktime(&mytm);
     tiV.tv_usec = 0;
     settimeofday(&tiV, nullptr);
@@ -601,16 +605,19 @@ int fnc_TIME(const char* szCmdLn)
 int fnc_TYPE(const char* szCmdLn)
 {
   /* place your code here */
-  char sLine[ILINE];
+  #define BUFLEN 1024
+  char sLine[ILINE]= {""};
+  int16_t iBufLen= BUFLEN;
+  unsigned char ucBuffer[BUFLEN];
   argPathFn( szCmdLn, &sLine[0]);
   Serial.print(F(" : "));
-  Serial.println(sLine);
-  digitalWrite(PIN_LED,1);
+  digitalWrite(LED_BUILTIN, 1);
   if (SD.begin(SDCRD)) {
     File FH1 = SD.open(sLine, FILE_READ);
     if (FH1) {
       while (FH1.available()) {
-        Serial.write(FH1.read());
+        iBufLen= FH1.read(&ucBuffer[0], BUFLEN);
+        Serial.write(&ucBuffer[0], iBufLen);
       }
       Serial.print(F("\r\nFilesize: "));
       Serial.print(FH1.size(), DEC);
@@ -621,7 +628,7 @@ int fnc_TYPE(const char* szCmdLn)
       Serial.println(F(" not found!"));
     } 
     SD.end();
-    digitalWrite(PIN_LED,0);
+    digitalWrite(LED_BUILTIN, 0);
   }
    return( eTYPE );
 }  /* end of fnc_TYPE */
@@ -698,8 +705,154 @@ int fnc_VOL(const char* szCmdLn)
 /**************************************************/
 int fnc_XREC(const char* szCmdLn)
 {
-   /* place your code here */
-   return( eXREC );
+  /* place your code here */
+  #define Y_BSIZE 1024
+  #define X_BSIZE 128
+  #define Y_TIOUT 10000
+  char sLine[ILINE] = {""};
+  int32_t iByteCnt = 0, iBlkCnt;
+  int8_t iRecState;   // Receiver statemachine
+  bool bRecEnd=false;
+  unsigned char inChar;
+  int16_t iBlkSize;
+  unsigned char ucBuffer[Y_BSIZE];
+  uint64_t iStrtTi;
+  File FH1;
+  Serial.print(" : ");
+  if (((strlen(szCmdLn)>1)>=1)&& SD.begin(SDCRD)) {
+    digitalWrite(PIN_LED, 1);
+    argPathFn( szCmdLn, &sLine[0]);
+    iBlkCnt = 0;
+    iRecState = 0;
+    Serial.flush();
+    while (!bRecEnd) {
+      if (iRecState == 0) {
+        Serial.write(NAK);
+        iStrtTi= millis()+Y_TIOUT;
+        while ( (!Serial.available()) && (millis() < iStrtTi) ) { }
+        if ((Serial.readBytes(&inChar,1)==1) &&(millis()<iStrtTi)) {
+          if (SD.exists(sLine)){
+            SD.remove(sLine);
+          }
+          FH1 = SD.open(sLine, FILE_WRITE);
+          if ( (inChar== STX) && (millis()<iStrtTi) ) {
+            iBlkSize= Y_BSIZE;
+            iRecState = 1; // found Header token 
+          } else 
+          if ( (inChar== SOH) && (millis()<iStrtTi) ) {
+            iBlkSize= X_BSIZE;
+            iRecState = 1; // found Header token 
+          } else 
+          if ( (inChar== EOT)&&(millis()<iStrtTi) ) {
+            Serial.write((uint8_t)NAK); // end of transmision
+          } else {
+          } /* end if */
+        } else
+        if ((iBlkCnt < 5)&&(millis()>=iStrtTi) ) {
+          iBlkCnt++;
+        } else {
+          for (int iL= 1; iL<3; iL++){
+            Serial.write((uint8_t)CAN);
+          } /* end if */
+          bRecEnd= true;
+        } /* end if */
+      } else 
+      if (iRecState == 1) { 
+        iStrtTi= millis()+Y_TIOUT;
+        while ( (!Serial.available()) && (millis() < iStrtTi) ) { }
+        if ((Serial.readBytes(&inChar,1)==1) &&(millis()<iStrtTi)){
+          iBlkCnt= inChar;
+          iRecState = 2;
+        } else {
+          for (int iL= 1; iL<3; iL++){
+            Serial.write((uint8_t)CAN);
+          }
+          bRecEnd= true;
+        } /* end if */
+      } else 
+      if (iRecState == 2) {  // inverse block counter - not used!
+        iStrtTi= millis()+Y_TIOUT;
+        while ( (!Serial.available()) && (millis() < iStrtTi) ) { }
+        if ((Serial.readBytes(&inChar,1)==1) &&(millis()<iStrtTi)){
+          iBlkCnt= inChar;
+          iRecState = 3;
+        } else {
+          for (int iL= 1; iL<3; iL++){
+            Serial.write((uint8_t)CAN);
+          }
+          bRecEnd= true;
+        } /* end if */
+      } else
+      if (iRecState == 3) { 
+        iStrtTi= millis()+Y_TIOUT;
+        while((Serial.readBytes(&ucBuffer[0],iBlkSize)<iBlkSize)&&(millis()<iStrtTi) ) { }  
+        if (millis()<iStrtTi) {
+          iByteCnt= iByteCnt + iBlkSize;
+          FH1.write(&ucBuffer[0], iBlkSize);
+          iRecState = 4;
+        } else {
+          for (int iL= 1; iL<3; iL++){
+            Serial.write((uint8_t)CAN);
+          }
+          bRecEnd= true;
+        } /* end if */
+      } else
+      if (iRecState == 4) { 
+        iStrtTi= millis()+Y_TIOUT;
+        while ( (!Serial.available()) && (millis() < iStrtTi) ) { }
+        if ((Serial.readBytes(&inChar,1)==1) &&(millis()<iStrtTi)){
+          if ( millis()<iStrtTi ) {
+            Serial.write((uint8_t)ACK);
+            iRecState = 5; // found Header token 
+          }  /* end if */
+        } else {
+          for (int iL= 1; iL<3; iL++){
+            Serial.write((uint8_t)CAN);
+          }
+          bRecEnd= true;
+        } /* end if */
+      } /* end if */
+      if (iRecState == 5) { 
+        iStrtTi= millis()+Y_TIOUT;
+        while ( (Serial.readBytes(&inChar,1) ==0) && (millis() < iStrtTi) ) { }
+        if ((inChar== STX) && (millis()<iStrtTi)) {
+          iBlkSize= Y_BSIZE;
+          iRecState = 1; // found Header token for next data block
+        } else
+        if ((inChar== SOH) && (millis()<iStrtTi)) {
+          iBlkSize= X_BSIZE;
+          iRecState = 1; // found Header token for next data block
+        } else
+        if ((inChar== EOT) && (millis()<iStrtTi)) {
+          Serial.write((uint8_t)ACK);
+          bRecEnd= true;
+        } else {
+          for (int iL= 1; iL<3; iL++){
+            Serial.write((uint8_t)CAN);
+          }
+          bRecEnd= true;
+        } /* end if */
+      } /* end if */
+    } /* end while */
+    if (iRecState == 5) {
+      FH1.close();
+      Serial.print("\nByte Cnt ");
+      Serial.print(iByteCnt);
+      Serial.println("\nDone");
+    } else {
+      Serial.print("\nstoped at state ");
+      Serial.print(iRecState);
+      Serial.print("\nBlock Cnt ");
+      Serial.print(iBlkCnt);
+      Serial.print("\nByte Cnt ");
+      Serial.print(iByteCnt);
+    } /* end if */
+  } else {
+    Serial.println(" missing argument!");
+  } /* end if */
+  SD.end();
+  digitalWrite(PIN_LED, 0);
+  return( eXREC );
 }  /* end of fnc_XREC */
 
 /**************************************************/
@@ -711,66 +864,343 @@ int fnc_XREC(const char* szCmdLn)
 int fnc_XTRAN(const char* szCmdLn)
 {
   /* place your code here */
-  char sLine[ILINE];
-  argPathFn( szCmdLn, &sLine[0]);
+  char sLine[ILINE]={""};
+  uint64_t iFSize = 0;
+  uint16_t iCSum, iCrc;
+  uint16_t iBlkCnt = 1;
+  uint8_t iReTr = 0; 
+  bool bTiOut= false;
+  bool bTrans = false;
+  bool bCrc = true;
+  char inChar;       
+  unsigned char ucBuffer[Y_BSIZE];
+  uint64_t iStrtTi;
+
   Serial.print(F(" : "));
-  digitalWrite(PIN_LED, 1);  
-  if (SD.begin(SDCRD)) {
-    File FH1 = SD.open(sLine, FILE_READ);
-    if (FH1) {
-      uint64_t iFSize = 0;
-      int16_t iCSum;
-      uint8_t iBlkCnt = 1;
-      uint8_t iReTr = 0; 
-      bool bTrans = false;
-      char inChar;
-      unsigned char ucBuffer[X_BLOCK_SIZE];
-      iFSize = FH1.size();
-      Serial.print(iFSize);
-      Serial.print(F(" Bytes"));
-      while (FH1.available()) {
-        while (Serial.readBytes(&inChar, 1) == 0) {  } 
-        if (((inChar == NAK) && (!bTrans)) || ((inChar == ACK) && (bTrans))) {
+  if (strlen(szCmdLn) > 1){
+    digitalWrite(PIN_LED, 1); 
+    argPathFn( szCmdLn, &sLine[0]);
+    iStrtTi = millis(); 
+    if (SD.begin(SDCRD)) {
+      File FH1 = SD.open(sLine, FILE_READ);
+      if (FH1 != 0) {
+        iFSize = FH1.size();
+        Serial.print(iFSize);
+        Serial.print(F(" Bytes"));
+        while ((FH1.available()!=0)&&(!bTiOut)) {
+          while ((Serial.readBytes(&inChar,1)==0) && (millis()<(iStrtTi+ (X_TIMEOUT*12)))) {  } 
+          if (millis()>=(iStrtTi+(X_TIMEOUT*12))){
+            Serial.print("\nTimeout");
+            for (int iL= 1; iL<3; iL++){
+              Serial.write((uint8_t) CAN);
+            } /* end for */
+            bTiOut= true;
+          } else
+          // Datablock is CRC 1kByte
+          if (((inChar=='C')&&(!bTrans))||((inChar==ACK)&&(bTrans)&&bCrc)) {
+            bCrc = true;
+            iStrtTi= millis();
+            bTrans= true;
+            iReTr = 0;
+            int iRdLen= FH1.read(ucBuffer, Y_BSIZE);
+            if (iRdLen > 0) {
+              if (iRdLen < Y_BSIZE) {
+                for (int iL= iRdLen; iL<Y_BSIZE; iL++){
+                  ucBuffer[iL]= 0x00;
+                } /* end for */
+              } /* end if */
+              Serial.write((uint8_t) STX);
+              Serial.write((uint8_t) iBlkCnt);
+              Serial.write((uint8_t) ~iBlkCnt);
+              Serial.write(ucBuffer, Y_BSIZE); // block transfer
+              iCrc = 0;
+              for (int iL=0; iL<Y_BSIZE; iL++){
+                iCrc= uicalcCrc(ucBuffer[iL], iCrc);
+              } /* end for */
+              Serial.write((uint8_t) ((iCrc &0xff00) >>8));
+              Serial.write((uint8_t) (iCrc & 0x00ff));
+              iBlkCnt++;
+              iBlkCnt= iBlkCnt & 0x00ff;
+            // } else {
+            //   bCrc = false;  // if rest >128 Byte, transfer in 128 byte mode
+            } /* end if */
+          } else
+          // checksum 128 Byte
+          if (((inChar==NAK)&&(!bTrans))||((inChar==ACK)&&(bTrans))||!bCrc) {
+            bCrc= false;          
+            iStrtTi= millis();
             bTrans= true;
             iCSum = 0;
             iReTr = 0;
-            int iRdLen= FH1.read(ucBuffer, X_BLOCK_SIZE);
-            if (iRdLen > 0){
-              if (iRdLen < X_BLOCK_SIZE) {
-                for (int iL= iRdLen; iL<X_BLOCK_SIZE; iL++){
+            int iRdLen= FH1.read(ucBuffer, X_BSIZE);
+            if (iRdLen > 0) {
+              if (iRdLen < X_BSIZE) {
+                for (int iL= iRdLen; iL<X_BSIZE; iL++){
                   ucBuffer[iL]= 0x00;
                 } /* end for */
               } /* end if */
               Serial.write((uint8_t) SOH);
               Serial.write((uint8_t) iBlkCnt);
               Serial.write((uint8_t) ~iBlkCnt);
-              for (int iL=0; iL<X_BLOCK_SIZE; iL++){
-                Serial.write(ucBuffer[iL]);
+              // Blocktransfer vs. single char transfer
+              Serial.write(ucBuffer, X_BSIZE); // block transfer
+              for (int iL=0; iL<X_BSIZE; iL++){
                 iCSum = iCSum + ucBuffer[iL];
                 iCSum = iCSum & 0x00ff;
               } /* end for */
               Serial.write((uint8_t) iCSum);
               iBlkCnt++;
-            } else {
-
+              iBlkCnt= iBlkCnt & 0x00ff;
             } /* end if */
-        } /* end if */
-      } /* end while */
-     
-      delay (10);
-      Serial.write((uint8_t) EOT);
-      delay(10);
-      FH1.close();
-    } else {
-      Serial.print(sLine);
-      Serial.println(F(" not found!"));
-    } 
-    Serial.println(F(" transferred!"));
-    SD.end();
-    digitalWrite(PIN_LED,0);
+          } else
+          if (inChar == CAN){
+            for (int iL= 1; iL<3; iL++){
+              Serial.write((uint8_t) CAN);
+            }
+          } /* end if */
+        } /* end while */ 
+        Serial.write((uint8_t) EOT);
+        while ((Serial.readBytes(&inChar,1)==0) && (millis()<(iStrtTi+ (X_TIMEOUT)))) {  } 
+        Serial.write((uint8_t) EOT);
+        while ((Serial.readBytes(&inChar,1)==0) && (millis()<(iStrtTi+ (X_TIMEOUT)))) {  } 
+        FH1.close();
+      } else {
+        Serial.print(sLine);
+        Serial.println(F(" not found!"));
+      } 
+      if (!bTiOut) Serial.println(F(" done!"));
+      SD.end();
+      digitalWrite(PIN_LED,0);
+    }
+  } else {
+    Serial.println(" no argument!");
   }
   return( eXTRAN );
 } /* end of fnc_XTRAN */
+
+/**************************************************/
+/*! \brief fnc_YREC                                 
+    \param argument string: pointer of char
+    \return int- value of token
+    \ingroup token_parser */
+/**************************************************/
+int fnc_YREC(const char* szCmdLn)
+{
+  /* place your code here */
+  #define Y_BSIZE 1024
+  #define X_BSIZE 128
+  #define Y_TIOUT 10000
+  char sLine[ILINE] = {"xxxxx.yyy"};
+  int32_t iByteCnt = 0, iByteSum = 0, iBlkCnt;
+  int16_t iRecState;   // Receiver statemachine
+  uint8_t iChkSum;
+  //bool bTiOut= false;
+  bool bRecEnd=false;
+  unsigned char inChar;
+  int16_t iBlkSize;
+  unsigned char ucBuffer[Y_BSIZE];
+  uint64_t iStrtTi;
+  File FH1;
+  
+  Serial.print(" : ");
+  iBlkCnt = 0;
+  iRecState = 0;
+  if (SD.begin(SDCRD)) {
+  digitalWrite(PIN_LED,1);
+  Serial.flush();
+  while (!bRecEnd) {
+    if (iRecState == 0) {
+      // Serial.setTimeout(Y_TIOUT);
+      Serial.write("C");    // "C" request for 1kB/CRC transmission 
+      iStrtTi= millis()+3000; 
+      while ( (!Serial.available()) && (millis() < iStrtTi) ) { }
+      if ((Serial.readBytes(&inChar,1)==1) &&(millis()<iStrtTi)) {
+        if ( (inChar== STX) && (millis()<iStrtTi) ) {
+          iBlkSize= Y_BSIZE;
+          iRecState = 1; // found Header token 
+        } else 
+        if ( (inChar== SOH) && (millis()<iStrtTi) ) {
+          iBlkSize= X_BSIZE;
+          iRecState = 1; // found Header token 
+        } else 
+        if ( (inChar== EOT)&&(millis()<iStrtTi) ) {
+          Serial.write((uint8_t)NAK); // end of transmision
+          delay (20);
+          Serial.write((uint8_t)ACK);
+          iRecState = 901;
+        } else {
+        } /* end if */
+      } else
+      if ((iBlkCnt < 5)&&(millis()>=iStrtTi) ) {
+        iBlkCnt++;
+      } else {
+        iRecState = 90;
+      } /* end if */
+    } else 
+    if (iRecState == 1) { 
+      iStrtTi= millis()+Y_TIOUT;
+      while ( (!Serial.available()) && (millis() < iStrtTi) ) { }
+      if ((Serial.readBytes(&inChar,1)==1) &&(millis()<iStrtTi)){
+          iBlkCnt= inChar;
+          iRecState = 2;
+      } else {
+        iRecState =91;
+      } /* end if */
+    } else 
+    if (iRecState == 2) {  // inverse block counter - not used!
+      iStrtTi= millis()+Y_TIOUT;
+      while ( (!Serial.available()) && (millis() < iStrtTi) ) { }
+      if ((Serial.readBytes(&inChar,1)==1) &&(millis()<iStrtTi)){
+        if ((iBlkCnt==1)&&(iByteCnt==0)){   // if first datablock 
+          if (SD.exists(sLine)){
+            SD.remove(sLine);
+          }
+          FH1 = SD.open(sLine, (O_WRITE|O_CREAT)); // create file
+          if (FH1 !=0) {
+            iRecState= 3;
+          } else {
+            iRecState=921;
+          }
+        } else
+        if ((iBlkCnt==0)&&(iByteCnt==0)){
+          iRecState = 31;  // Filename in first block 
+        } else {
+          iRecState =3;
+        } /* end if */
+      } else {
+        iRecState =92;
+      } /* end if */
+    } else
+    if (iRecState == 31) { // YMODEM Filename block
+      iBlkSize = X_BSIZE;
+      iStrtTi= millis()+Y_TIOUT;
+      while((Serial.readBytes(&ucBuffer[0],iBlkSize)<iBlkSize)&&(millis()<iStrtTi) ) { }  
+      if (millis()<iStrtTi) {
+        if (strlen((char*)ucBuffer)>=1) {
+          argPathFn( (char*)ucBuffer, &sLine[0]);
+          // strcpy(&sLine[0], (char*)ucBuffer);
+          iRecState = 4;
+        } else {
+          iRecState = 5;
+          bRecEnd= true;
+        }
+      } else {
+        iRecState =931;
+      } /* end if */
+    } else
+    if (iRecState == 3) { 
+      iStrtTi= millis()+Y_TIOUT;
+      while((Serial.readBytes(&ucBuffer[0],iBlkSize)<iBlkSize)&&(millis()<iStrtTi) ) { }  
+      if (millis()<iStrtTi) {
+        iByteCnt= iByteCnt + iBlkSize;
+        #ifdef DEBUG
+        Serial1.print("\nByteCnt 0x");
+        Serial1.print(iByteCnt, HEX);
+        #endif
+        iRecState = 4;
+      } else {
+        iRecState = 93;
+      } /* end if */
+    } else
+    if (iRecState == 4) { 
+      iStrtTi= millis()+Y_TIOUT;
+      unsigned char cCrc[2];
+      while ( (!Serial.available()) && (millis() < iStrtTi) ) { }
+      if ((Serial.readBytes(&cCrc[0], 2)==2) &&(millis()<iStrtTi)){
+        #ifdef DEBUG
+        uint16_t iMyCRC =0;
+        for (int iL=0; iL < iBlkSize; iL++){
+          iMyCRC= uicalcCrc(ucBuffer[iL],iMyCRC);
+        }
+        Serial1.print("\nMyCRC 0x");
+        Serial1.print(iMyCRC, HEX);
+        uint16_t iCRC = (cCrc[0]<<8) + cCrc[1]; // big endian
+        Serial1.print("\nRxCRC 0x");
+        Serial1.print(iCRC, HEX);
+        #endif
+        if ( millis()<iStrtTi ) {
+          Serial.write((uint8_t)ACK);
+          if ((iBlkCnt==0)&&(iByteCnt==0)) {
+            Serial.write("C");  // YModem: reopen connection after Filename
+            iByteSum = iByteSum + iByteCnt;
+            iByteCnt = 0;
+          } else {
+            FH1.write(ucBuffer,iBlkSize);
+          } /* end if */
+          iRecState = 5; // found Header token 
+        }  /* end if */
+      } else {
+        iRecState =94;
+      } /* end if */
+    } else
+    if (iRecState == 5) { 
+      iStrtTi= millis()+Y_TIOUT;
+      while ( (Serial.readBytes(&inChar,1) ==0) && (millis() < iStrtTi) ) { }
+      if ((inChar== STX) && (millis()<iStrtTi)) {
+        iBlkSize= Y_BSIZE;
+        iRecState = 1; // found Header token for next data block
+      } else
+      if ((inChar== SOH) && (millis()<iStrtTi)) {
+        iBlkSize= X_BSIZE;
+        iRecState = 1; // found Header token for next data block
+      } else
+      if ((inChar== EOT) && (millis()<iStrtTi)) {
+        FH1.close();
+        Serial.write((uint8_t)NAK);
+        delay(10);
+        Serial.write((uint8_t)ACK);
+        delay(10);
+        Serial.write("C");
+        Serial.flush();
+        iStrtTi= millis()+100;
+        while ( (Serial.readBytes(&inChar,1) ==0) && (millis() < iStrtTi) ) { }
+        if ((inChar== SOH) && (millis()<iStrtTi)) {
+          iByteCnt= 0;
+          iBlkCnt = 0;
+          iRecState= 1;  // next file
+        } else {
+          bRecEnd= true;
+        }
+      } else {
+        iRecState =95;
+      } /* end if */
+    } else
+    if (iRecState >= 90) {  // something goes wrong
+      for (int iL= 1; iL<3; iL++){
+        Serial.write((uint8_t)CAN);
+      }
+      bRecEnd= true;
+    } /* end if */
+  } /* end while */
+  if (iRecState == 5) {
+    Serial.print("\nByte Cnt ");
+    Serial.print(iByteSum);
+    Serial.println("\nDone");
+  } else {
+    Serial.print("\nstoped at state ");
+    Serial.print(iRecState);
+    Serial.print("\nByte Cnt ");
+    Serial.print(iByteSum);
+  } /* end if */
+  // Serial.flush();
+  SD.end();
+  digitalWrite(PIN_LED,0);
+  }
+  return( eYREC );
+}  /* end of fnc_YREC */
+
+/**************************************************/
+/*! \brief fnc_YTRAN                                
+    \param argument string: pointer of char
+    \return int- value of token
+    \ingroup token_parser */
+/**************************************************/
+int fnc_YTRAN(const char* szCmdLn)
+{
+  /* place your code here */
+  return( eYTRAN );
+}  /* end of fnc_YTRAN */ 
+
 
 /**************************************************/
 /*! \brief fnc_TokenNotFound
@@ -803,222 +1233,156 @@ int fnSDOS_Parser(char *szCmdLn)
    iCmdPos= strcspn(szCmdLn," ");
    if (iCmdPos <= 0) iCmdPos= strlen(szCmdLn);
  
-   // Recursion: 0; Test token no.:11 HELP
-   // multible token
-   iCmdLn= strncmp( szCmdLn, "HELP", (iCmdPos>(const size_t)strlen("HELP")? iCmdPos: (const size_t)strlen("HELP")));
-   if (iCmdLn < 0) // is less than HELP
-   {
-      // search down(1,10)
-      // Recursion: 1; Test token no.:5 COPY
-      // multible token
-      iCmdLn= strncmp( szCmdLn, "COPY", (iCmdPos>(const size_t)strlen("COPY")? iCmdPos: (const size_t)strlen("COPY")));
-      if (iCmdLn < 0) // is less than COPY
-      {
-         // search down(1,4)
-         // Recursion: 2; Test token no.:2 CD
-         // multible token
-         iCmdLn= strncmp( szCmdLn, "CD", (iCmdPos>(const size_t)strlen("CD")? iCmdPos: (const size_t)strlen("CD")));
-         if (iCmdLn < 0) // is less than CD
-         {
-            // search down(1,1)
-            // Recursion: 3; Test token no.:1 AUTO
-            // single token
-            if (strncmp( szCmdLn, "AUTO", (iCmdPos>(const size_t)strlen("AUTO")? iCmdPos: (const size_t)strlen("AUTO")))== 0)
-            {
-               iRet= fnc_AUTO(szCmdLn+((const size_t) strlen("AUTO")));
-            } else { //unknown token)
-               iRet= fnc_TokenNotFound(szCmdLn);
+   iCmdLn= strncmp( szCmdLn, "MD", (iCmdPos >= sizeof("MD"))? iCmdPos: sizeof("MD")-1);
+   if (iCmdLn < 0) { // is less than MD
+      iCmdLn= strncmp( szCmdLn, "DATE", (iCmdPos >= sizeof("DATE"))? iCmdPos: sizeof("DATE")-1);
+      if (iCmdLn < 0) { // is less than DATE
+         iCmdLn= strncmp( szCmdLn, "CLS", (iCmdPos >= sizeof("CLS"))? iCmdPos: sizeof("CLS")-1);
+         if (iCmdLn < 0) { // is less than CLS
+            if (strncmp( szCmdLn, "AUTO", (iCmdPos >= sizeof("AUTO"))? iCmdPos: sizeof("AUTO")-1)==0) {
+               iRet= fnc_AUTO(szCmdLn+sizeof("AUTO")-1);
+            } else { // not AUTO
+               if (strncmp( szCmdLn, "CD", (iCmdPos >= sizeof("CD"))? iCmdPos: sizeof("CD")-1)==0) {
+                  iRet= fnc_CD(szCmdLn+sizeof("CD")-1);
+               } else { //unknown token
+                  iRet= fnc_TokenNotFound(szCmdLn);
+               } // End of(2:CD)
             } // End of(1:AUTO)
          } else {
-            if (iCmdLn > 0) // is higher than CD
-            {
-               // search up(2,4)
-               // Recursion: 4; Test token no.:3 CLS
-               // double token
-               if (strncmp( szCmdLn, "CLS", (iCmdPos>(const size_t)strlen("CLS")? iCmdPos: (const size_t)strlen("CLS")))== 0)
-               {
-                  iRet= fnc_CLS(szCmdLn+((const size_t) strlen("CLS")));
-               } else { // not CLS
-                  if (strncmp( szCmdLn, "CONFIG", (iCmdPos>(const size_t)strlen("CONFIG")? iCmdPos: (const size_t)strlen("CONFIG")))== 0)
-                  {
-                     iRet= fnc_CONFIG(szCmdLn+((const size_t) strlen("CONFIG")));
+            if (iCmdLn > 0) { // is higher than CLS
+               if (strncmp( szCmdLn, "CONFIG", (iCmdPos >= sizeof("CONFIG"))? iCmdPos: sizeof("CONFIG")-1)==0) {
+                  iRet= fnc_CONFIG(szCmdLn+sizeof("CONFIG")-1);
+               } else { // not CONFIG
+                  if (strncmp( szCmdLn, "COPY", (iCmdPos >= sizeof("COPY"))? iCmdPos: sizeof("COPY")-1)==0) {
+                     iRet= fnc_COPY(szCmdLn+sizeof("COPY")-1);
                   } else { //unknown token
                      iRet= fnc_TokenNotFound(szCmdLn);
-                  } // End of(4:CONFIG)
-               } // End of(3:CLS)
+                  } // End of(5:COPY)
+               } // End of(4:CONFIG)
             } else {
-               if (iCmdLn == 0) // Token CD found
-               {
-                  iRet= fnc_CD(szCmdLn+((const size_t) strlen("CD")));
-               } // End of(2:CD)
+               if (iCmdLn == 0) { // Token CLS found
+                  iRet= fnc_CLS(szCmdLn+sizeof("CLS")-1);
+               } // End of(3:CLS)
             }
          }
       } else {
-         if (iCmdLn > 0) // is higher than COPY
-         {
-            // search up(5,10)
-            // Recursion: 3; Test token no.:8 DIR
-            // multible token
-            iCmdLn= strncmp( szCmdLn, "DIR", (iCmdPos>(const size_t)strlen("DIR")? iCmdPos: (const size_t)strlen("DIR")));
-            if (iCmdLn < 0) // is less than DIR
-            {
-               // search down(6,7)
-               // Recursion: 4; Test token no.:6 DATE
-               // double token
-               if (strncmp( szCmdLn, "DATE", (iCmdPos>(const size_t)strlen("DATE")? iCmdPos: (const size_t)strlen("DATE")))== 0)
-               {
-                  iRet= fnc_DATE(szCmdLn+((const size_t) strlen("DATE")));
-               } else { // not DATE
-                  if (strncmp( szCmdLn, "DEL", (iCmdPos>(const size_t)strlen("DEL")? iCmdPos: (const size_t)strlen("DEL")))== 0)
-                  {
-                     iRet= fnc_DEL(szCmdLn+((const size_t) strlen("DEL")));
+         if (iCmdLn > 0) { // is higher than DATE
+            iCmdLn= strncmp( szCmdLn, "ECHO", (iCmdPos >= sizeof("ECHO"))? iCmdPos: sizeof("ECHO")-1);
+            if (iCmdLn < 0) { // is less than ECHO
+               if (strncmp( szCmdLn, "DEL", (iCmdPos >= sizeof("DEL"))? iCmdPos: sizeof("DEL")-1)==0) {
+                  iRet= fnc_DEL(szCmdLn+sizeof("DEL")-1);
+               } else { // not DEL
+                  if (strncmp( szCmdLn, "DIR", (iCmdPos >= sizeof("DIR"))? iCmdPos: sizeof("DIR")-1)==0) {
+                     iRet= fnc_DIR(szCmdLn+sizeof("DIR")-1);
                   } else { //unknown token
                      iRet= fnc_TokenNotFound(szCmdLn);
-                  } // End of(7:DEL)
-               } // End of(6:DATE)
+                  } // End of(8:DIR)
+               } // End of(7:DEL)
             } else {
-               if (iCmdLn > 0) // is higher than DIR
-               {
-                  // search up(8,10)
-                  // Recursion: 5; Test token no.:9 ECHO
-                  // double token
-                  if (strncmp( szCmdLn, "ECHO", (iCmdPos>(const size_t)strlen("ECHO")? iCmdPos: (const size_t)strlen("ECHO")))== 0)
-                  {
-                     iRet= fnc_ECHO(szCmdLn+((const size_t) strlen("ECHO")));
-                  } else { // not ECHO
-                     if (strncmp( szCmdLn, "FORMAT", (iCmdPos>(const size_t)strlen("FORMAT")? iCmdPos: (const size_t)strlen("FORMAT")))== 0)
-                     {
-                        iRet= fnc_FORMAT(szCmdLn+((const size_t) strlen("FORMAT")));
+               if (iCmdLn > 0) { // is higher than ECHO
+                  if (strncmp( szCmdLn, "FORMAT", (iCmdPos >= sizeof("FORMAT"))? iCmdPos: sizeof("FORMAT")-1)==0) {
+                     iRet= fnc_FORMAT(szCmdLn+sizeof("FORMAT")-1);
+                  } else { // not FORMAT
+                     if (strncmp( szCmdLn, "HELP", (iCmdPos >= sizeof("HELP"))? iCmdPos: sizeof("HELP")-1)==0) {
+                        iRet= fnc_HELP(szCmdLn+sizeof("HELP")-1);
                      } else { //unknown token
                         iRet= fnc_TokenNotFound(szCmdLn);
-                     } // End of(10:FORMAT)
-                  } // End of(9:ECHO)
+                     } // End of(11:HELP)
+                  } // End of(10:FORMAT)
                } else {
-                  if (iCmdLn == 0) // Token DIR found
-                  {
-                     iRet= fnc_DIR(szCmdLn+((const size_t) strlen("DIR")));
-                  } // End of(8:DIR)
+                  if (iCmdLn == 0) { // Token ECHO found
+                     iRet= fnc_ECHO(szCmdLn+sizeof("ECHO")-1);
+                  } // End of(9:ECHO)
                }
             }
          } else {
-            if (iCmdLn == 0) // Token COPY found
-            {
-               iRet= fnc_COPY(szCmdLn+((const size_t) strlen("COPY")));
-            } // End of(5:COPY)
+            if (iCmdLn == 0) { // Token DATE found
+               iRet= fnc_DATE(szCmdLn+sizeof("DATE")-1);
+            } // End of(6:DATE)
          }
       }
    } else {
-      if (iCmdLn > 0) // is higher than HELP
-      {
-         // search up(11,22)
-         // Recursion: 2; Test token no.:17 TIME
-         // multible token
-         iCmdLn= strncmp( szCmdLn, "TIME", (iCmdPos>(const size_t)strlen("TIME")? iCmdPos: (const size_t)strlen("TIME")));
-         if (iCmdLn < 0) // is less than TIME
-         {
-            // search down(12,16)
-            // Recursion: 3; Test token no.:14 RD
-            // multible token
-            iCmdLn= strncmp( szCmdLn, "RD", (iCmdPos>(const size_t)strlen("RD")? iCmdPos: (const size_t)strlen("RD")));
-            if (iCmdLn < 0) // is less than RD
-            {
-               // search down(12,13)
-               // Recursion: 4; Test token no.:12 MD
-               // double token
-               if (strncmp( szCmdLn, "MD", (iCmdPos>(const size_t)strlen("MD")? iCmdPos: (const size_t)strlen("MD")))== 0)
-               {
-                  iRet= fnc_MD(szCmdLn+((const size_t) strlen("MD")));
-               } else { // not MD
-                  if (strncmp( szCmdLn, "PATH", (iCmdPos>(const size_t)strlen("PATH")? iCmdPos: (const size_t)strlen("PATH")))== 0)
-                  {
-                     iRet= fnc_PATH(szCmdLn+((const size_t) strlen("PATH")));
+      if (iCmdLn > 0) { // is higher than MD
+         iCmdLn= strncmp( szCmdLn, "TYPE", (iCmdPos >= sizeof("TYPE"))? iCmdPos: sizeof("TYPE")-1);
+         if (iCmdLn < 0) { // is less than TYPE
+            iCmdLn= strncmp( szCmdLn, "REN", (iCmdPos >= sizeof("REN"))? iCmdPos: sizeof("REN")-1);
+            if (iCmdLn < 0) { // is less than REN
+               if (strncmp( szCmdLn, "PATH", (iCmdPos >= sizeof("PATH"))? iCmdPos: sizeof("PATH")-1)==0) {
+                  iRet= fnc_PATH(szCmdLn+sizeof("PATH")-1);
+               } else { // not PATH
+                  if (strncmp( szCmdLn, "RD", (iCmdPos >= sizeof("RD"))? iCmdPos: sizeof("RD")-1)==0) {
+                     iRet= fnc_RD(szCmdLn+sizeof("RD")-1);
                   } else { //unknown token
                      iRet= fnc_TokenNotFound(szCmdLn);
-                  } // End of(13:PATH)
-               } // End of(12:MD)
+                  } // End of(14:RD)
+               } // End of(13:PATH)
             } else {
-               if (iCmdLn > 0) // is higher than RD
-               {
-                  // search up(14,16)
-                  // Recursion: 5; Test token no.:15 REN
-                  // double token
-                  if (strncmp( szCmdLn, "REN", (iCmdPos>(const size_t)strlen("REN")? iCmdPos: (const size_t)strlen("REN")))== 0)
-                  {
-                     iRet= fnc_REN(szCmdLn+((const size_t) strlen("REN")));
-                  } else { // not REN
-                     if (strncmp( szCmdLn, "TEMP", (iCmdPos>(const size_t)strlen("TEMP")? iCmdPos: (const size_t)strlen("TEMP")))== 0)
-                     {
-                        iRet= fnc_TEMP(szCmdLn+((const size_t) strlen("TEMP")));
+               if (iCmdLn > 0) { // is higher than REN
+                  if (strncmp( szCmdLn, "TEMP", (iCmdPos >= sizeof("TEMP"))? iCmdPos: sizeof("TEMP")-1)==0) {
+                     iRet= fnc_TEMP(szCmdLn+sizeof("TEMP")-1);
+                  } else { // not TEMP
+                     if (strncmp( szCmdLn, "TIME", (iCmdPos >= sizeof("TIME"))? iCmdPos: sizeof("TIME")-1)==0) {
+                        iRet= fnc_TIME(szCmdLn+sizeof("TIME")-1);
                      } else { //unknown token
                         iRet= fnc_TokenNotFound(szCmdLn);
-                     } // End of(16:TEMP)
-                  } // End of(15:REN)
+                     } // End of(17:TIME)
+                  } // End of(16:TEMP)
                } else {
-                  if (iCmdLn == 0) // Token RD found
-                  {
-                     iRet= fnc_RD(szCmdLn+((const size_t) strlen("RD")));
-                  } // End of(14:RD)
+                  if (iCmdLn == 0) { // Token REN found
+                     iRet= fnc_REN(szCmdLn+sizeof("REN")-1);
+                  } // End of(15:REN)
                }
             }
          } else {
-            if (iCmdLn > 0) // is higher than TIME
-            {
-               // search up(17,22)
-               // Recursion: 4; Test token no.:20 VOL
-               // multible token
-               iCmdLn= strncmp( szCmdLn, "VOL", (iCmdPos>(const size_t)strlen("VOL")? iCmdPos: (const size_t)strlen("VOL")));
-               if (iCmdLn < 0) // is less than VOL
-               {
-                  // search down(18,19)
-                  // Recursion: 5; Test token no.:18 TYPE
-                  // double token
-                  if (strncmp( szCmdLn, "TYPE", (iCmdPos>(const size_t)strlen("TYPE")? iCmdPos: (const size_t)strlen("TYPE")))== 0)
-                  {
-                     iRet= fnc_TYPE(szCmdLn+((const size_t) strlen("TYPE")));
-                  } else { // not TYPE
-                     if (strncmp( szCmdLn, "VER", (iCmdPos>(const size_t)strlen("VER")? iCmdPos: (const size_t)strlen("VER")))== 0)
-                     {
-                        iRet= fnc_VER(szCmdLn+((const size_t) strlen("VER")));
+            if (iCmdLn > 0) { // is higher than TYPE
+               iCmdLn= strncmp( szCmdLn, "XREC", (iCmdPos >= sizeof("XREC"))? iCmdPos: sizeof("XREC")-1);
+               if (iCmdLn < 0) { // is less than XREC
+                  if (strncmp( szCmdLn, "VER", (iCmdPos >= sizeof("VER"))? iCmdPos: sizeof("VER")-1)==0) {
+                     iRet= fnc_VER(szCmdLn+sizeof("VER")-1);
+                  } else { // not VER
+                     if (strncmp( szCmdLn, "VOL", (iCmdPos >= sizeof("VOL"))? iCmdPos: sizeof("VOL")-1)==0) {
+                        iRet= fnc_VOL(szCmdLn+sizeof("VOL")-1);
                      } else { //unknown token
                         iRet= fnc_TokenNotFound(szCmdLn);
-                     } // End of(19:VER)
-                  } // End of(18:TYPE)
-               } else {
-                  if (iCmdLn > 0) // is higher than VOL
-                  {
-                     // search up(20,22)
-                     // Recursion: 6; Test token no.:21 XREC
-                     // double token
-                     if (strncmp( szCmdLn, "XREC", (iCmdPos>(const size_t)strlen("XREC")? iCmdPos: (const size_t)strlen("XREC")))== 0)
-                     {
-                        iRet= fnc_XREC(szCmdLn+((const size_t) strlen("XREC")));
-                     } else { // not XREC
-                        if (strncmp( szCmdLn, "XTRAN", (iCmdPos>(const size_t)strlen("XTRAN")? iCmdPos: (const size_t)strlen("XTRAN")))== 0)
-                        {
-                           iRet= fnc_XTRAN(szCmdLn+((const size_t) strlen("XTRAN")));
-                        } else { //unknown token
-                           iRet= fnc_TokenNotFound(szCmdLn);
-                        } // End of(22:XTRAN)
-                     } // End of(21:XREC)
-                  } else {
-                     if (iCmdLn == 0) // Token VOL found
-                     {
-                        iRet= fnc_VOL(szCmdLn+((const size_t) strlen("VOL")));
                      } // End of(20:VOL)
+                  } // End of(19:VER)
+               } else {
+                  if (iCmdLn > 0) { // is higher than XREC
+                     iCmdLn= strncmp( szCmdLn, "YREC", (iCmdPos >= sizeof("YREC"))? iCmdPos: sizeof("YREC")-1);
+                     if (iCmdLn == 0) {
+                        iRet= fnc_YREC(szCmdLn+sizeof("YREC")-1);
+                     } else { // not YREC
+                        if (iCmdLn < 0) {
+                           iCmdLn= strncmp( szCmdLn, "XTRAN", (iCmdPos >= sizeof("XTRAN"))? iCmdPos: sizeof("XTRAN")-1);
+                           if (iCmdLn == 0) {
+                              iRet= fnc_XTRAN(szCmdLn+sizeof("XTRAN")-1);
+                           } else { //unknown token
+                              iRet= fnc_TokenNotFound(szCmdLn);
+                           }
+                        } else {
+                           if (strncmp( szCmdLn, "YTRAN", (iCmdPos >= sizeof("YTRAN"))? iCmdPos: sizeof("YTRAN")-1)==0) {
+                              iRet= fnc_YTRAN(szCmdLn+sizeof("YTRAN")-1);
+                           } else { //unknown token
+                              iRet= fnc_TokenNotFound(szCmdLn);
+                           } // End of(24:YTRAN)
+                        } // End of(22:XTRAN)
+                     } // End of(23:YREC)
+                  } else {
+                     if (iCmdLn == 0) { // Token XREC found
+                        iRet= fnc_XREC(szCmdLn+sizeof("XREC")-1);
+                     } // End of(21:XREC)
                   }
                }
             } else {
-               if (iCmdLn == 0) // Token TIME found
-               {
-                  iRet= fnc_TIME(szCmdLn+((const size_t) strlen("TIME")));
-               } // End of(17:TIME)
+               if (iCmdLn == 0) { // Token TYPE found
+                  iRet= fnc_TYPE(szCmdLn+sizeof("TYPE")-1);
+               } // End of(18:TYPE)
             }
          }
       } else {
-         if (iCmdLn == 0) // Token HELP found
-         {
-            iRet= fnc_HELP(szCmdLn+((const size_t) strlen("HELP")));
-         } // End of(11:HELP)
+         if (iCmdLn == 0) { // Token MD found
+            iRet= fnc_MD(szCmdLn+sizeof("MD")-1);
+         } // End of(12:MD)
       }
    }
    return(iRet);

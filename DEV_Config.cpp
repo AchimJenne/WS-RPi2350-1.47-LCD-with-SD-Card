@@ -183,10 +183,6 @@ void DEV_GPIO_Init(void)
     DEV_GPIO_Mode(LCD_DC_PIN, 1);
     DEV_GPIO_Mode(LCD_CS_PIN, 1);
     DEV_GPIO_Mode(LCD_BL_PIN, 1);
-    
-    // DEV_GPIO_Mode(LCD_CS_PIN, 1);
-    // DEV_GPIO_Mode(LCD_BL_PIN, 1);
-
     DEV_Digital_Write(LCD_CS_PIN, 1);
     DEV_Digital_Write(LCD_DC_PIN, 0);
     DEV_SET_PWM(0);

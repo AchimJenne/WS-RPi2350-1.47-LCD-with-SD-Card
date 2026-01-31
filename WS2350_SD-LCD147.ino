@@ -7,16 +7,6 @@
 /**************************************************/
 
 /**************************************************/
-/*! \brief Automatic generated enum- commands
-    \defgroup token_parser
-    \sa datetime_t */
-/**************************************************/
-enum eCmdSt {eNoToken=0,
-      eAUTO, eCD, eCLS, eCONFIG, eCOPY, eDATE, eDEL, eDIR,
-      eECHO, eFORMAT, eHELP, eMD, ePATH, eRD, eREN, eTEMP,
-      eTIME, eTYPE, eVER, eVOL, eXREC, eXTRAN};  
-
-/**************************************************/
 #include "SD-OS_Pico.h"
 #include <stdio.h>
 #include <time.h>
@@ -65,7 +55,9 @@ void setup() {
   struct tm mytm;
   Serial.begin(115200);
   // wait on Serial to be available on Leonardo
-  while (!Serial){
+  int iTi = 0;
+  while ((!Serial) && (iTi <= 2000)){
+    iTi++;
     delay(10);
   } 
   delay(10);

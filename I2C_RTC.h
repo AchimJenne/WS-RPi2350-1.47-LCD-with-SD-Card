@@ -12,7 +12,7 @@
  * -----------------------------------------------------------*/
 
 #ifndef RTC_H
-
+#define RTC_H
 //#if defined(ARDUINO_ARCH_RP2040)
 #define UNIX_OFFSET 946684800
 //#else
@@ -36,18 +36,13 @@
 
 //const char* week_days[7]
 //    = {"MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN" };
-
 // enum _WEEK_DAYS_
-
 #include <time.h>
 #include <Arduino.h>
 #include <Wire.h>
 
-
 /*
-
 */
-
 #define DS3231_ADDR 0x68
 
 class DS3231 {

@@ -96,12 +96,10 @@ bool editLine(char *psLine, char inChar)
           }
           if ((iL2C ==5)){
             Serial.print(F("\e[25A"));
-            //Serial.println(F("PgUp"));
             iESC= 0;
           }
           if ((iL2C ==6)){
             Serial.print(F("\e[25B"));
-            //Serial.println(F("PgDown"));
             iESC= 0;
           }          
         } else
@@ -110,7 +108,6 @@ bool editLine(char *psLine, char inChar)
           Serial.print(inChar);
           Serial.print(" ");
           Serial.println(inChar, HEX);
-          //iESC= 0;
         } else
         if ((inChar == C_BS)&&(iESC ==0)) { // backpace key 
           if (strlen(psLine) >= 1) {
@@ -243,8 +240,7 @@ int argPathFn(const char* szArgLn, char* szPathFn)
 } /* end of function */
 
 /**************************************************/
-/*! \brief parser main function
-     func_MonParser                                 
+/*! \brief func_MonParser function                                 
     \param szCmdLn is a pointer of char Cmd-Line
     \return int value of token; 0: no token found
     \ingroup token_parser
