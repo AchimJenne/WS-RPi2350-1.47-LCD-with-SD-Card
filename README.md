@@ -6,8 +6,11 @@ Analog Clock
 
 ![Pico_SD-OS](https://github.com/user-attachments/assets/2fbff618-61a3-431b-95c4-c61678a272d7)
 
-This project based on the Waveshare RP2350 board witch 1.47in LCD, RGB-LED and SD- Card. It is really a compact board with a small and nice LCD.
-But it should work with other Boards in different configurations.
+This project based on the Waveshare RP2350 board with 1.47in LCD, RGB-LED and SD- Card. It is really a compact board with a small and nice LCD.
+But this Software should work with on Boards in different configurations.
+
+The X/Y-Modem Filetransfer is helpful if you want to exchange file on a running System - whenever you can't remove the SD-Card. In my case, the host-software can handle the files via remote control.
+The X/Y-Modem transfer performance is not high, but 60-100 kBytes/s in GPIO-mode is OK for my Application.
 
 Available commands are :
 **CD, MD, RD** - directory handling
@@ -30,8 +33,11 @@ Available commands are :
 
 **VOL** - list the SD-Card information
 
-**XTRAN** - file transfer from mircocontroller to host via XMODEM protocol
+**XTRAN** - file transfer from RasPi to host via XMODEM protocol (supports XModem 128Byte/ChkSum and 1K/CRC)
 
+**XREC** - file transfer from host to RasPi via XMODEM protocol (supports XModem 128Byte/ChkSum and 1K/CRC)
+
+**YREC** - file transfer from host to RasPi via YMODEM protocol (helpful to save many files on RasPi)
 
 Some of the Waveshare LCD- functions are modified and the memory transfer to the LCD are fixed. 
 ![IMG_1962-1_cut_comp](https://github.com/user-attachments/assets/44041312-dc29-402c-8022-37abfc868a69)
