@@ -1,17 +1,18 @@
 # WS-RPi2350-1.47-LCD-with-SD-Card
-Arduino: RPi2350 1.47 LCD with SD-Card on GPIO- Interface. The actual version shows some System informations and an analog clock.
-
+Arduino: RPi2350 1.47 LCD with SD-Card on GPIO- Interface. The actual version shows some System information’s and an analog clock.
+A DS3231 RTC could be helpful – but not needed for testing the functionality. If no external RTC found, the internal RTC loaded from the software build date.
+This project based on the Waveshare RP2350 board with 1.47in LCD, RGB-LED and SD- Card. It is really a compact board with a small and nice LCD.
+But this Software should work in different configurations on different Boards
+.
 ![IMG_0594_cut_comp](https://github.com/user-attachments/assets/b310cbd5-01ac-4ed5-817f-367a4c0c8aa5)
 
-Analog Clock
+The Raspberry Pico2350 with Micro-SD slot and 1.47 Inch LCD - shows an analog Clock
 
 ![Pico_SD-OS](https://github.com/user-attachments/assets/2fbff618-61a3-431b-95c4-c61678a272d7)
 
-This project based on the Waveshare RP2350 board with 1.47in LCD, RGB-LED and SD- Card. It is really a compact board with a small and nice LCD.
-But this Software should work with on Boards in different configurations.
 
 # The X/Y-Modem 
-This old-school Filetransfer is helpful if you want to exchange file on a running uC-System - whenever it's not possible to remove the SD-Card and/or switch off the uC-System. 
+This old-school Filetransfer is helpful if do you want to exchange files on a running uC-System - whenever it's not possible to remove the SD-Card and/or switch off the uC-System. 
 In my case, the host-software can handle the files transfer via remote control and the uC need no power-off.
 The X/Y-Modem transfer performance is not verry high, but 60-100 kBytes/s in GPIO-mode is OK in my Application.
 
